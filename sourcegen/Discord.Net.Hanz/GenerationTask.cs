@@ -8,16 +8,6 @@ namespace Discord.Net.Hanz;
 
 public abstract class GenerationTask
 {
-    private static readonly Dictionary<
-        Type,
-        Func<IncrementalGeneratorInitializationContext, Logger, GenerationTask>
-    > _generators = new()
-    {
-        {typeof(LinksV5), (ctx, logger) => new LinksV5(ctx, logger)},
-        {typeof(LinkActorTargets), (ctx, logger) => new LinkActorTargets(ctx, logger)},
-        {typeof(LinkSchematics), (ctx, logger) => new LinkSchematics(ctx, logger)},
-    };
-
     private static readonly Dictionary<Type, GenerationTask> _tasks = [];
 
     private static readonly Logger _logger = Logger.CreateForTask("GenerationTaskBuilder").WithCleanLogFile();
@@ -46,11 +36,11 @@ public abstract class GenerationTask
 
                 _logger.Log($"Initializing {type}...");
 
-                if (_tasks.ContainsKey(type) || !_generators.ContainsKey(type)) continue;
+                if (_tasks.ContainsKey(type)) continue;
 
                 var taskLogger = Logger.CreateForTask(type.Name).WithCleanLogFile();
 
-                _tasks[type] = _generators[type](context, taskLogger);
+                _tasks[type] = (GenerationTask) Activator.CreateInstance(type, context, taskLogger);
 
                 taskLogger.Flush();
             }
@@ -80,7 +70,7 @@ public abstract class GenerationTask
 
         var logger = Logger.CreateForTask(typeof(T).Name).WithCleanLogFile();
         
-        var instance = (T) _generators[typeof(T)](context, logger);
+        var instance = (T) Activator.CreateInstance(typeof(T), context, logger);
         _tasks[typeof(T)] = instance;
         
         logger.Flush();

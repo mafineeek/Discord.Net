@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
-using Discord.Net.Hanz.Tasks.Actors.V3;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 
@@ -9,6 +9,8 @@ namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes;
 public abstract class Node
 {
     private static readonly Dictionary<Type, Node> _nodes = [];
+
+    private static Logger _nodeLogger = Net.Hanz.Logger.CreateForTask("LinkNodes");
 
     private readonly NodeProviders _providers;
 
@@ -29,7 +31,7 @@ public abstract class Node
             => new(state, Spec);
     }
 
-    protected IncrementalValuesProvider<Branch<StatefulGeneration<TState>>> ApplyPathNesting<TState>(
+    protected IncrementalValuesProvider<Branch<StatefulGeneration<TState>>> NestTypesViaPaths<TState>(
         IncrementalValuesProvider<Branch<StatefulGeneration<TState>>> provider
     ) where TState : IPathedState
     {
@@ -41,42 +43,170 @@ public abstract class Node
         CancellationToken token
     ) where TState : IPathedState
     {
-        var roots = new Dictionary<TypePath, StatefulGeneration<TState>>();
-        var lookup = new Dictionary<TypePath, TypeSpec>();
+        using var logger = Logger
+            .GetSubLogger(nameof(BuildGraph))
+            .GetSubLogger(GetType().Name);
 
-        foreach (var generation in graph.Links.OrderBy(x => x.State.Path.CountOfType(GetType())))
+        var result = new List<StatefulGeneration<TState>>();
+        var stack = new Stack<StatefulGeneration<TState>>();
+
+        foreach (var generation in graph.Links)
         {
             var (state, spec) = generation;
 
-            lookup[state.Path] = spec;
+            if (stack.Count == 0)
+            {
+                stack.Push(generation);
+                logger.Log($"stack: += {spec.Name} -> {state.Path}");
+                continue;
+            }
 
             var pathDepth = state.Path.CountOfType(GetType());
 
             if (pathDepth == 1)
             {
-                roots[state.Path] = generation;
-                continue;
+                logger.Log($"stack: building tree size of {stack.Count}");
+                BuildTree();
             }
 
-            var searchPath = state.Path;
-            var searchTotal = pathDepth - 1;
-            var toNest = spec;
-
-            for (var i = 0; i < searchTotal; i++)
-            {
-                searchPath--;
-
-                if (!lookup.TryGetValue(searchPath, out var parentSpec))
-                    throw new InvalidOperationException($"Missing spec for {searchPath} from {state.Path}");
-
-                toNest = lookup[searchPath] = parentSpec.AddNestedType(toNest);
-
-                if (roots.ContainsKey(searchPath))
-                    roots[searchPath] = roots[searchPath] with {Spec = toNest};
-            }
+            logger.Log($"stack: += {spec.Name} -> {state.Path}");
+            stack.Push(generation);
         }
 
-        return roots.Values;
+        if (stack.Count > 0)
+            BuildTree();
+
+        return result;
+
+        void BuildTree()
+        {
+            start:
+
+            var part = stack.Pop();
+            logger.Log($" - part = {part.Spec.Name}");
+
+            var group = new List<TypeSpec>() {part.Spec};
+            var deferred = new Queue<StatefulGeneration<TState>>();
+
+            if (stack.Count == 0)
+            {
+                logger.Log("   - single size tree added to result");
+                result.Add(part);
+                return;
+            }
+
+            while (stack.Count > 0)
+            {
+                var previous = stack.Pop();
+                logger.Log($" - prev = {previous.Spec.Name}");
+
+                if (deferred.Count > 0)
+                {
+                    for (var i = deferred.Count; i > 0 && deferred.Count > 0; i--)
+                    {
+                        var deferredPart = deferred.Dequeue();
+
+                        if (previous.State.Path.IsParentTo(deferredPart.State.Path))
+                        {
+                            logger.Log($"   - deferred {deferredPart.Spec.Name} added to prev");
+                            previous = previous with {Spec = previous.Spec.AddNestedType(deferredPart.Spec)};
+                            continue;
+                        }
+
+                        deferred.Enqueue(deferredPart);
+                    }
+                }
+
+                if (previous.State.Path.IsParentTo(part.State.Path))
+                {
+                    logger.Log($"   - {group.Count} types are children to previous type {previous.State.Path}");
+
+                    previous = previous with {Spec = previous.Spec.AddNestedTypes(group)};
+
+                    group.Clear();
+
+                    if (previous.State.Path.CountOfType(GetType()) == 1)
+                    {
+                        logger.Log("     - previous is a root, adding to results");
+                        // its a root
+                        result.Add(previous);
+
+                        if (stack.Count > 0)
+                        {
+                            logger.Log("     - stack has more elements, reiterating...");
+                            goto start;
+                        }
+
+                        break;
+                    }
+
+                    if (stack.Count == 0)
+                    {
+                        // we have a non root, with no roots on the stack, this is an error
+                        logger.Warn($"non-root {previous.Spec.Name}: {previous.State.Path} has no parent on stack");
+                        throw new InvalidOperationException(
+                            $"non-root {previous.Spec.Name}: {previous.State.Path} has no parent on stack"
+                        );
+                    }
+
+                    logger.Log($"   - part <- {previous.Spec.Name}");
+                    // set the part we're working with to the modified previous
+                    part = previous;
+                    group.Add(part.Spec);
+                    continue;
+                }
+
+                // they share the same parent
+                if (-previous.State.Path == -part.State.Path)
+                {
+                    if (previous.State.Path.CountOfType(GetType()) == 1)
+                    {
+                        // should not happen
+                        logger.Warn(
+                            $"dual-root stack {previous.Spec.Name}: {previous.State.Path} | {part.Spec.Name}: {part.State.Path}");
+                        throw new InvalidOperationException(
+                            $"non-root {previous.Spec.Name}: {previous.State.Path} has no parent on stack"
+                        );
+                    }
+
+                    group.Add(previous.Spec);
+                    logger.Log($"   - group += {previous.Spec.Name} ({group.Count})");
+                    continue;
+                }
+
+                if ((previous.State.Path & part.State.Path).CountOfType(GetType()) >= 1)
+                {
+                    logger.Log($"   - deferring {part.Spec.Name}: {part.State.Path}");
+
+                    // the two parts share a common ancestor in the graph.
+                    // we can defer the part until the ancestor appears.
+                    deferred.Enqueue(part);
+
+                    part = previous;
+                    group.Clear();
+                    group.Add(part.Spec);
+                    logger.Log($"   - part <- {previous.Spec.Name}");
+
+                    continue;
+                }
+
+                // we cant do anything with this node
+                logger.Warn(
+                    $"Unknown node: {previous.Spec.Name}: {previous.State.Path} | {part.Spec.Name}: {part.State.Path}");
+            }
+
+            if (deferred.Count > 0)
+            {
+                logger.Log($" - pushing {deferred.Count} deferred nodes onto the stack");
+
+                while (deferred.Count > 0)
+                {
+                    var deferredPart = deferred.Dequeue();
+                    stack.Push(deferredPart);
+                    logger.Log($"   += {deferredPart.Spec.Name}: {deferredPart.State.Path}");
+                }
+            }
+        }
     }
 
     private IEnumerable<Branch<Graph<TState>>> MapGraphs<TState>(
@@ -227,58 +357,26 @@ public abstract class Node
             );
     }
 
-    protected IncrementalValuesProvider<StatefulGeneration<TState>> AddChildren<TState>(
-        IncrementalValuesProvider<StatefulGeneration<TState>> provider,
-        params Type[] children
-    )
-        where TState : IHasActorInfo
-    {
-        Logger.Log($"Registering {children.Length} children for {typeof(TState).Name}");
-
-        try
-        {
-            foreach (var child in children)
-            {
-                if (!typeof(Node).IsAssignableFrom(child))
-                {
-                    Logger.Log($"{child}: skipping, not a node");
-                    continue;
-                }
-
-                switch (GetInstance(child, _providers))
-                {
-                    case Nodes.INestedNode nested:
-                        provider = nested.From(provider);
-                        break;
-                    case INestedNode<TState> nested:
-                        provider = nested.From(provider);
-                        break;
-                    default:
-                        Logger.Log($"{child}: skipping, not a nested node");
-                        break;
-                }
-            }
-
-            return provider;
-        }
-        catch (Exception x)
-        {
-            Logger.Log(LogLevel.Error, $"Failed to initialize children: {x}");
-            throw;
-        }
-        finally
-        {
-            Logger.Flush();
-        }
-    }
-
-    public static IncrementalValuesProvider<StatefulGeneration<ActorNode.IntrospectedBuildState>> Create(
+    public static void Initialize(
         NodeProviders providers
     )
     {
         _nodes.Clear();
 
-        return GetInstance<ActorNode>(providers).TypeProvider;
+        foreach
+        (
+            var node in
+            typeof(Node)
+                .Assembly
+                .GetTypes()
+                .Where(x =>
+                    typeof(Node).IsAssignableFrom(x) && x.IsClass && !x.IsAbstract
+                )
+        )
+        {
+            if (_nodes.ContainsKey(node)) continue;
+            GetInstance(node, providers);
+        }
     }
 
     protected TNode GetInstance<TNode>()
@@ -295,7 +393,7 @@ public abstract class Node
             _nodes[type] = node = (Node) Activator.CreateInstance(
                 type,
                 providers,
-                Logger.CreateForTask(type.Name).WithCleanLogFile()
+                _nodeLogger.GetSubLogger(type.Name).WithCleanLogFile()
             );
 
         return node;
@@ -313,84 +411,6 @@ public abstract class Node
             .Replace("Actor", string.Empty)
             .Replace("Gateway", string.Empty)
             .Replace("Rest", string.Empty);
-    }
-
-    public static IEnumerable<IEnumerable<T>> GetProduct<T>(IEnumerable<T> source, bool removeLast = false)
-    {
-        var arr = source.ToArray();
-
-        if (arr.Length == 0) return [];
-
-        return Enumerable.Range(1, (1 << arr.Length) - (removeLast ? 2 : 1))
-            .Select(index => arr
-                .Where((_, i) => (index & (1 << i)) != 0)
-            );
-    }
-}
-
-public readonly struct NodeProviders
-{
-    public readonly record struct Hierarchy(
-        string Actor,
-        ImmutableEquatableArray<ActorInfo> Parents,
-        ImmutableEquatableArray<ActorInfo> Children
-    );
-
-    public IncrementalValueProvider<Grouping<string, ActorInfo>> ActorAncestors { get; }
-
-    public IncrementalValuesProvider<Hierarchy> ActorHierarchy { get; }
-
-    public IncrementalValueProvider<Grouping<string, ActorInfo>> ActorInfos { get; }
-
-    public IncrementalValuesProvider<LinkSchematics.Schematic> Schematics { get; }
-
-    public IncrementalValuesProvider<LinkActorTargets.GenerationTarget> Actors { get; }
-
-    public IncrementalValuesProvider<LinksV5.NodeContext> Context { get; }
-
-    public NodeProviders(
-        IncrementalValuesProvider<LinkSchematics.Schematic> Schematics,
-        IncrementalValuesProvider<LinkActorTargets.GenerationTarget> Actors,
-        IncrementalValuesProvider<LinksV5.NodeContext> Context)
-    {
-        this.Schematics = Schematics;
-        this.Actors = Actors;
-        this.Context = Context;
-
-        ActorHierarchy = Actors
-            .Collect()
-            .SelectMany(GetHierarchy);
-
-        ActorInfos = Actors
-            .Select((x, _) => ActorInfo.Create(x))
-            .GroupBy(x => x.Actor.DisplayString);
-
-        ActorAncestors = ActorHierarchy
-            .Collect()
-            .GroupBy(x => x.Actor, x => x.Parents);
-    }
-
-
-    private static IEnumerable<Hierarchy> GetHierarchy(
-        ImmutableArray<LinkActorTargets.GenerationTarget> targets,
-        CancellationToken token)
-    {
-        foreach (var target in targets)
-        {
-            yield return new Hierarchy(
-                target.Actor.ToDisplayString(),
-                targets
-                    .Where(x => Net.Hanz.Hierarchy.Implements(target.Actor, x.Actor))
-                    .Select((x, _) => ActorInfo.Create(x))
-                    .ToImmutableEquatableArray(),
-                targets
-                    .Where(x => Net.Hanz.Hierarchy.Implements(x.Actor, target.Actor))
-                    .Select((x, _) => ActorInfo.Create(x))
-                    .ToImmutableEquatableArray()
-            );
-
-            token.ThrowIfCancellationRequested();
-        }
     }
 }
 

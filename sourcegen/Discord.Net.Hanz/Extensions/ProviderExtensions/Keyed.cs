@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 
@@ -8,52 +9,107 @@ public readonly record struct Keyed<TKey, TValue>(
     TValue Value
 );
 
+public sealed class KeyedCollection<TKey, TValue>
+{
+    private readonly Func<TValue, TKey> _keySelector;
+    private readonly Dictionary<TKey, TValue> _dictionary;
+    private HashSet<TValue> _buffer;
+
+    private int _hash;
+    
+    private KeyedCollection(Func<TValue, TKey> keySelector)
+    {
+        _keySelector = keySelector;
+        _dictionary = [];
+        _buffer = [];
+    }
+
+    private TValue OnModified(TValue value)
+    {
+        _buffer.Add(value);
+        return value;
+    }
+
+    private KeyedCollection<TKey, TValue> OnBatch(ImmutableArray<TValue> values)
+    {
+        _hash = HashCode.OfEach(values);
+        
+        if (_dictionary.Count == 0)
+        {
+            foreach (var value in values)
+            {
+                _dictionary[_keySelector(value)] = value;
+            }
+
+            _buffer.Clear();
+            return this;
+        }
+
+        if (values.Length - _buffer.Count < _dictionary.Count)
+        {
+            // some were removed
+            foreach (var value in values)
+            {
+                if (!_dictionary.ContainsValue(value))
+                    _dictionary.Remove(_keySelector(value));
+            }
+        }
+
+        foreach (var value in _buffer)
+        {
+            _dictionary[_keySelector(value)] = value;
+        }
+
+        _buffer.Clear();
+
+        return this;
+    }
+
+    public static IncrementalValueProvider<KeyedCollection<TKey, TValue>> Create(
+        IncrementalValuesProvider<TValue> provider,
+        Func<TValue, TKey> keySelector
+    )
+    {
+        var collection = new KeyedCollection<TKey, TValue>(keySelector);
+
+        return provider
+            .Select((x, _) => collection.OnModified(x))
+            .Collect()
+            .Select((values, _) => collection.OnBatch(values));
+    }
+
+    public static IncrementalValuesProvider<Keyed<TSource, TValue>> Join<TSource, TKey, TValue>(
+        IncrementalValuesProvider<TSource> provider,
+        IncrementalValueProvider<KeyedCollection<TKey, TValue>> collection,
+        Func<TSource, TKey> keySelector)
+    {
+        return provider
+            .Select((value, _) => (Key: keySelector(value), Value: value))
+            .Combine(collection)
+            .SelectMany((x, _) =>
+                x.Right._dictionary.TryGetValue(x.Left.Key, out var match)
+                    ? ImmutableArray.Create(new Keyed<TSource, TValue>(x.Left.Value, match))
+                    : ImmutableArray<Keyed<TSource, TValue>>.Empty
+            );
+    }
+
+    public override int GetHashCode()
+        => _hash;
+
+    public override bool Equals(object? obj)
+        => obj is KeyedCollection<TKey, TValue> collection && collection._hash == _hash;
+}
+
 public static partial class ProviderExtensions
 {
-    public static IncrementalValuesProvider<Keyed<TKey, TValue>> ToKeyed<TKey, TValue>(
-        this IncrementalValuesProvider<TValue> source,
-        Func<TValue, CancellationToken, TKey> keySelector
-    )
-        where TValue : IEquatable<TValue>
-        where TKey : IEquatable<TKey>
-        => source.Select((element, token) => new Keyed<TKey, TValue>(keySelector(element, token), element));
+    public static IncrementalValueProvider<KeyedCollection<TKey, TValue>> ToKeyed<TKey, TValue>(
+        this IncrementalValuesProvider<TValue> provider,
+        Func<TValue, TKey> keySelector
+    ) => KeyedCollection<TKey, TValue>.Create(provider, keySelector);
 
-    public static IncrementalValueProvider<Grouping<TKey, TValue>> ToGroup<TKey, TValue>(
-        this IncrementalValuesProvider<Keyed<TKey, TValue>> keyed
-    )
-        where TValue : IEquatable<TValue>
-        where TKey : IEquatable<TKey>
-        => keyed
-            .Collect()
-            .Select((group, token) =>
-            {
-                var dict = new Dictionary<TKey, List<TValue>>();
-                foreach (var entry in group)
-                {
-                    if (!dict.TryGetValue(entry.Key, out var values))
-                        dict[entry.Key] = values = new();
-
-                    values.Add(entry.Value);
-                    
-                    token.ThrowIfCancellationRequested();
-                }
-
-                return new Grouping<TKey, TValue>(
-                    dict.ToDictionary(
-                        x => x.Key,
-                        x => x.Value.ToImmutableEquatableArray()
-                    ),
-                    group.GetHashCode()
-                );
-            });
-
-    public static IncrementalValuesProvider<TResult> Combine<TKey, TValue, TSource, TResult>(
-        this IncrementalValuesProvider<Keyed<TKey, TValue>> keyed,
+    public static IncrementalValuesProvider<Keyed<TSource, TValue>> Join<TSource, TKey, TValue>(
+        this IncrementalValueProvider<KeyedCollection<TKey, TValue>> collection,
         IncrementalValuesProvider<TSource> source,
-        Func<TSource, TKey> keySelector,
-        Func<TSource, TValue, TResult> resultSelector
-    ) 
-        where TValue : IEquatable<TValue>
-        where TKey : IEquatable<TKey>
-        => source.Pair(keyed.ToGroup(), keySelector, resultSelector);
+        Func<TSource, TKey> keySelector
+    ) => KeyedCollection<TKey, TValue>.Join(source, collection, keySelector);
 }

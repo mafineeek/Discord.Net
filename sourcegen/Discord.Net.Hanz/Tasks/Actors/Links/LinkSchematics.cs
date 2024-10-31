@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
 using System.Reflection;
-using Discord.Net.Hanz.Tasks.Actors.Links.V4;
+using Discord.Net.Hanz.Utils;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -10,7 +10,8 @@ namespace Discord.Net.Hanz.Tasks.Actors.V3;
 public class LinkSchematics : GenerationTask
 {
     public readonly record struct Schematic(
-        Entry Root
+        Entry Root,
+        ImmutableEquatableArray<string> Usings
     );
 
     public readonly record struct Entry(
@@ -54,6 +55,58 @@ public class LinkSchematics : GenerationTask
                         ? new[] {x.Right.Value}.ToImmutableArray()
                         : ImmutableArray<Schematic>.Empty;
             });
+
+        var provider = SourceSchematics.Select(CreateSchematicSpec);
+
+        context.RegisterSourceOutput(
+            provider,
+            CreateSchematic
+        );
+    }
+
+    private (TypeSpec Spec, ImmutableEquatableArray<string> Usings) CreateSchematicSpec(Schematic schematic,
+        CancellationToken token)
+    {
+        return (Build(schematic.Root, ImmutableArray<Entry>.Empty), schematic.Usings);
+
+        TypeSpec Build(Entry entry, ImmutableArray<Entry> path)
+        {
+            var nextPath = entry.Type.Name == "ILinkType"
+                ? path
+                : path.Add(entry);
+
+
+            var spec = TypeSpec
+                .From(entry.Type)
+                .AddModifiers("partial")
+                .AddNestedTypes(entry.Children.Select(x => Build(x, nextPath)));
+
+            if (path.Length > 0)
+            {
+                spec = spec
+                    .AddBases([
+                        $"{schematic.Root.Type}.{entry.Type.ReferenceName}",
+                        ..path.Select(x => $"{schematic.Root.Type}.{x.Type.ReferenceName}")
+                    ]);
+            }
+
+            return spec;
+        }
+    }
+
+    private void CreateSchematic(SourceProductionContext context,
+        (TypeSpec Spec, ImmutableEquatableArray<string> Usings) result)
+    {
+        context.AddSource(
+            "LinksV5/Schematics",
+            $$"""
+              {{string.Join(Environment.NewLine, result.Usings)}}
+
+              namespace Discord;
+
+              {{result.Spec}}
+              """
+        );
     }
 
 
@@ -80,7 +133,7 @@ public class LinkSchematics : GenerationTask
 
             if (root is null) return null;
 
-            return new Schematic(root.Value);
+            return new Schematic(root.Value, new(syntax.GetUsingDirectives()));
         }
         finally
         {
@@ -90,7 +143,7 @@ public class LinkSchematics : GenerationTask
 
     public Schematic? MapNonCoreSchematic(Compilation compilation, CancellationToken token)
     {
-        if (LinkActorTargets.GetAssemblyTarget(compilation) is LinkActorTargets.AssemblyTarget.Core)
+        if (ActorsTask.GetAssemblyTarget(compilation) is ActorsTask.AssemblyTarget.Core)
             return null;
 
         var logger = _logger
@@ -138,7 +191,7 @@ public class LinkSchematics : GenerationTask
 
             if (root is null) return null;
 
-            return new Schematic(root.Value);
+            return new Schematic(root.Value, []);
         }
         finally
         {
@@ -178,7 +231,7 @@ public class LinkSchematics : GenerationTask
 
                     if (childNode is null) continue;
 
-                    if(GetEntry(root, childNode, lookup, token, logger) is not {} next)
+                    if (GetEntry(root, childNode, lookup, token, logger) is not { } next)
                         continue;
 
                     entry = next;

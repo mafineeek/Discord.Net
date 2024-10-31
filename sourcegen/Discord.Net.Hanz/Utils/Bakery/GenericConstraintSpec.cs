@@ -27,7 +27,7 @@ public readonly record struct GenericConstraintSpec(
         if(parameter.HasConstructorConstraint)
             constraints.Add("new()");
 
-        constraints.AddRange(parameter.ConstraintTypes.Select(x => x.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+        constraints.AddRange(parameter.ConstraintTypes.Select(x => x.ToDisplayString()));
 
         if (constraints.Count == 0) return default;
 

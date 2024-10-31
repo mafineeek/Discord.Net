@@ -72,7 +72,7 @@ public readonly record struct MethodSpec(
                         $",{Environment.NewLine}",
                         Parameters.Select(x => x.ToString(includeParameterDefaults))
                     )
-                    .PrefixSpaces(4)
+                    .Prefix(4)
                     .WithNewlinePadding(4)
                 );
         }
@@ -86,7 +86,7 @@ public readonly record struct MethodSpec(
         {
             builder
                 .AppendLine()
-                .Append(string.Join(Environment.NewLine, GenericConstraints).PrefixSpaces(4));
+                .Append(string.Join(Environment.NewLine, GenericConstraints).Prefix(4));
         }
 
         if (Expression is not null)

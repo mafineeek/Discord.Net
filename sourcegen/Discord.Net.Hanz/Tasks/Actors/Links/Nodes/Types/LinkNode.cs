@@ -21,15 +21,6 @@ public class LinkNode :
         public bool IsTemplate { get; } = !Path.Contains<LinkNode>();
 
         public TypePath Path { get; } = Path.Add<LinkNode>(Entry.Type.ReferenceName);
-
-        public IEnumerable<string> GetCartesianBases()
-        {
-            foreach (var entries in GetProduct(Path.OfType<LinkNode>(), removeLast: true))
-            {
-                yield return
-                    $"{ActorInfo.Actor}.{string.Join(".", entries)}";
-            }
-        }
     }
 
 
@@ -73,7 +64,7 @@ public class LinkNode :
             GetInstance<ExtensionNode>()
         );
 
-        return ApplyPathNesting(nestedProvider).Select((x, _) => x.Spec);
+        return NestTypesViaPaths(nestedProvider).Select((x, _) => x.Spec);
     }
 
     private StatefulGeneration<State> CreateLinkType(
@@ -84,7 +75,7 @@ public class LinkNode :
     {
         var spec = TypeSpec
             .From(state.Entry.Type)
-            .AddModifiers("partial");
+            .AddModifiers("new");
 
         foreach (var implementation in implementations)
         {
@@ -99,21 +90,21 @@ public class LinkNode :
 
             switch (state.ActorInfo.Assembly)
             {
-                case LinkActorTargets.AssemblyTarget.Core:
+                case ActorsTask.AssemblyTarget.Core:
                     spec = spec.AddBases(
                         $"{state.ActorInfo.FormattedLinkType}.{state.Path.FormatRelative()}"
                     );
                     break;
-                case LinkActorTargets.AssemblyTarget.Rest:
+                case ActorsTask.AssemblyTarget.Rest:
                     spec = spec.AddBases(
                         state.ActorInfo.FormattedRestLinkType
                     );
                     break;
             }
         }
-        else
+        else if(state.Path.First.HasValue)
         {
-            spec = spec.AddBases(state.GetCartesianBases());
+            spec = spec.AddBases([..state.Path.First.Value + state.Path.Slice(1).SemanticalProduct()]);
         }
 
         return new StatefulGeneration<State>(

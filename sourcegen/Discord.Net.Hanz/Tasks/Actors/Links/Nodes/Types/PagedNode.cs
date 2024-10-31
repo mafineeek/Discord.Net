@@ -1,154 +1,124 @@
-// using Discord.Net.Hanz.Tasks.Actors.V3;
-// using Microsoft.CodeAnalysis;
-// using LinkTarget = Discord.Net.Hanz.Tasks.Actors.V3.LinkActorTargets.GenerationTarget;
-//
-// namespace Discord.Net.Hanz.Tasks.Actors.Links.V4.Nodes.Types;
-//
-// public class PagedNode(LinkTarget target, LinkSchematics.Entry entry) : LinkTypeNode(target, entry)
-// {
-//     public bool PagesEntity => Entry.Symbol.TypeArguments.Length == 1;
-//
-//     public ITypeSymbol PagedEntityType
-//         => Entry.Symbol.TypeArguments.Length == 2
-//             ? Entry.Symbol.TypeParameters[0]
-//             : Target.Entity;
-//
-//     public string PagingProviderType
-//         => $"Func<{Target.Actor}.{GetTypeName()}, TParams?, RequestOptions?, IAsyncPaged<{PagedEntityType}>>";// $"Discord.IPagedLinkProvider<{PagedEntityType}, TParams>";
-//
-//     private protected override void Visit(NodeContext context, Logger logger)
-//     {
-//         Properties.Clear();
-//         Properties.Add(new("PagingProvider", PagingProviderType));
-//         
-//         base.Visit(context, logger);
-//         
-//         RedefinesLinkMembers = Ancestors.Count > 0;
-//     }
-//
-//     public override string Build(NodeContext context, Logger logger)
-//     {
-//         AddDefaultProvider();
-//         
-//         return base.Build(context, logger);
-//     }
-//
-//     protected override void AddMembers(List<string> members, NodeContext context, Logger logger)
-//     {
-//         if (!IsTemplate || !RedefinesLinkMembers) return;
-//         
-//         members.AddRange([
-//             $"new IAsyncPaged<{PagedEntityType}> PagedAsync(TParams? args = default, RequestOptions? options = null);",
-//             $"IAsyncPaged<{PagedEntityType}> {FormattedLinkType}.{LinksV4.FormatTypeName(Entry.Symbol)}.PagedAsync(TParams? args, RequestOptions? options) => PagedAsync(args, options);",
-//         ]);
-//
-//         if (ParentLinks.Any())
-//         {
-//             members.AddRange([
-//                 $"IAsyncPaged<{PagedEntityType}> {Target.Actor}.{LinksV4.FormatTypeName(Entry.Symbol)}.PagedAsync(TParams? args, RequestOptions? options) => PagedAsync(args, options);"
-//             ]);
-//         }
-//
-//         foreach (var ancestor in Ancestors)
-//         {
-//             var overrideType =
-//                 $"{(
-//                     ancestor.Ancestors.Count > 0
-//                         ? $"{ancestor.Target.Actor}{FormatRelativeTypePath()}"
-//                         : ancestor.FormattedLinkType
-//                 )}.{LinksV4.FormatTypeName(Entry.Symbol)}";
-//
-//             var ancestorPagedType = PagesEntity ? ancestor.Target.Entity.ToDisplayString() : "TPaged";
-//
-//             members.AddRange([
-//                 $"IAsyncPaged<{ancestorPagedType}> {overrideType}.PagedAsync(TParams? args, RequestOptions? options) => PagedAsync(args, options);"
-//             ]);
-//         }
-//     }
-//
-//     protected override void CreateImplementation(
-//         List<string> members,
-//         List<string> bases,
-//         NodeContext context,
-//         Logger logger)
-//     {
-//         var memberModifier = ImplementationBase is not null
-//             ? "override "
-//             : ImplementationChild is not null
-//                 ? "virtual "
-//                 : string.Empty;
-//         
-//         members.Add(
-//             $"""
-//              public {memberModifier}IAsyncPaged<{PagedEntityType}> PagedAsync(TParams? args = default, RequestOptions? options = null)
-//                  => PagingProvider(this, args, options);
-//              """
-//         );
-//
-//         if (RedefinesLinkMembers)
-//         {
-//             members.Add(
-//                 $"""
-//                  IAsyncPaged<{PagedEntityType}> {FormatAsTypePath()}.PagedAsync(TParams? args, RequestOptions? options)
-//                      => PagedAsync(args, options);
-//                  """
-//             );
-//         }
-//         else
-//         {
-//             var corePagedEntityType = PagesEntity ? Target.GetCoreEntity() : PagedEntityType;
-//
-//             members.AddRange([
-//                 $"""
-//                  IAsyncPaged<{PagedEntityType}> {FormattedLinkType}.{GetTypeName()}.PagedAsync(TParams? args, RequestOptions? options)
-//                      => PagedAsync(args, options);
-//                  """,
-//                 $"""
-//                  IAsyncPaged<{corePagedEntityType}> {FormattedCoreLinkType}.{GetTypeName()}.PagedAsync(TParams? args, RequestOptions? options)
-//                      => PagedAsync(args, options);
-//                  """
-//             ]);
-//         }
-//     }
-//
-//     private void AddDefaultProvider()
-//     {
-//         if (Parent is not ActorNode || RootActorNode is null || IsCore || !PagesEntity) return;
-//
-//         if (
-//             Target.GetCoreEntity()
-//                 .Interfaces
-//                 .FirstOrDefault(x =>
-//                     x.Name is "IPagedFetchableOfMany"
-//                 ) is not { } fetchable
-//         ) return;
-//
-//         if (fetchable.TypeArguments[1] is not INamedTypeSymbol routeModel)
-//             return;
-//
-//         if (
-//             !routeModel.Equals(Target.Model, SymbolEqualityComparer.Default)
-//             // &&
-//             //!Hierarchy.Implements(Target.Model, routeModel)
-//         ) return;
-//         
-//         RootActorNode.AdditionalTypes.Add(
-//             $$"""
-//             internal static new IAsyncPaged<{{Target.Entity}}> DefaultPagingProvider(
-//                 {{Target.Actor}}.Paged<{{fetchable.TypeArguments[2]}}> link,
-//                 {{fetchable.TypeArguments[2]}}? args,
-//                 RequestOptions? options
-//             )    
-//             {
-//                 return new RestPager<{{Target.Entity}}, IEnumerable<{{Target.Model}}>, {{fetchable.TypeArguments[2]}}>(
-//                     link.Client,
-//                     models => models.Select(link.CreateEntity),
-//                     args,
-//                     link,
-//                     options
-//                 );
-//             }
-//             """
-//         );
-//     }
-// }
+using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
+using Discord.Net.Hanz.Utils.Bakery;
+using Microsoft.CodeAnalysis;
+
+namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
+
+public class PagedNode :
+    Node,
+    ILinkImplmenter
+{
+    public readonly record struct State(
+        bool PagesEntity,
+        ActorInfo ActorInfo,
+        string PagedType,
+        string PagingProviderType,
+        string ReferenceName,
+        ImmutableEquatableArray<(string AsyncPagedType, string OverrideTarget)> Ancestors)
+    {
+        public string AsyncPagedType => $"IAsyncPaged<{PagedType}>";
+
+        public static State Create(LinkNode.State link, Grouping<string, ActorInfo> ancestorGrouping)
+        {
+            var pagesEntity = link.Entry.Type.Generics.Length == 1;
+
+            var pagedType = pagesEntity
+                ? link.ActorInfo.Entity.DisplayString
+                : link.Entry.Type.Generics[0];
+
+            var ancestors = ancestorGrouping.GetGroupOrEmpty(link.ActorInfo.Actor.DisplayString);
+
+            return new State(
+                pagesEntity,
+                link.ActorInfo,
+                pagedType,
+                $"Func<{link.ActorInfo}.{link.Entry.Type.ReferenceName}, TParams?, RequestOptions?, IAsyncPaged<{pagedType}>>",
+                link.Entry.Type.ReferenceName,
+                new(
+                    ancestors.Select(x =>
+                        (
+                            $"IAsyncPaged<{(pagesEntity ? x.Entity.DisplayString : pagedType)}>",
+                            ancestorGrouping.GetGroupOrEmpty(x.Actor.DisplayString).Count > 0
+                                ? $"{x.Actor}.{link.Path.FormatRelative()}"
+                                : $"{x.FormattedLinkType}.{link.Entry.Type.ReferenceName}"
+                        )
+                    )
+                )
+            );
+        }
+    }
+    
+    private readonly IncrementalValueProvider<Grouping<string, ActorInfo>> _ancestors;
+
+    public PagedNode(NodeProviders providers, Logger logger) : base(providers, logger)
+    {
+        _ancestors = providers.ActorAncestors;
+    }
+
+    private static bool WillGenerate(LinkNode.State state)
+        => state is {IsTemplate: true, Entry.Type.Name: "Paged"};
+
+    public IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> Branch(
+        IncrementalValuesProvider<Branch<LinkNode.State>> provider)
+    {
+        return provider
+            .Where(WillGenerate)
+            .Combine(_ancestors)
+            .Select((tuple, _) => tuple.Left
+                .Mutate(State.Create(tuple.Left.Value, tuple.Right))
+            )
+            .Select((branch, token) => branch.Mutate(CreateImplmentation(branch.Value, token)));
+    }
+
+    private ILinkImplmenter.LinkImplementation CreateImplmentation(State state, CancellationToken token)
+    {
+        return new ILinkImplmenter.LinkImplementation(
+            CreateInterfaceSpec(state, token),
+            CreateImplementationSpec(state, token)
+        );
+    }
+
+    private ILinkImplmenter.LinkSpec CreateInterfaceSpec(State state, CancellationToken token)
+    {
+        return new ILinkImplmenter.LinkSpec(
+            Methods: new([
+                new MethodSpec(
+                    Name: "PagedAsync",
+                    ReturnType: state.AsyncPagedType,
+                    Modifiers: new(["new"]),
+                    Parameters: new([
+                        ("TParams?", "args", "default"),
+                        ("RequestOptions?", "options", "null"),
+                    ])
+                ),
+                new MethodSpec(
+                    Name: "PagedAsync",
+                    ReturnType: state.AsyncPagedType,
+                    ExplicitInterfaceImplementation: $"{state.ActorInfo.FormattedLinkType}.{state.ReferenceName}",
+                    Parameters: new([
+                        ("TParams?", "args", "default"),
+                        ("RequestOptions?", "options", "null"),
+                    ]),
+                    Expression: "PagedAsync(args, options)"
+                ),
+                ..state.Ancestors.Select(x => 
+                    new MethodSpec(
+                        Name: "PagedAsync",
+                        ReturnType: x.AsyncPagedType,
+                        ExplicitInterfaceImplementation: x.OverrideTarget,
+                        Parameters: new([
+                            ("TParams?", "args", "default"),
+                            ("RequestOptions?", "options", "null"),
+                        ]),
+                        Expression: "PagedAsync(args, options)"
+                    )
+                )
+            ])
+        );
+    }
+
+    private ILinkImplmenter.LinkSpec CreateImplementationSpec(State state, CancellationToken token)
+    {
+        return ILinkImplmenter.LinkSpec.Empty;
+    }
+}

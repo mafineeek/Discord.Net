@@ -193,14 +193,14 @@ public readonly record struct TypeSpec(
         {
             builder
                 .AppendLine(" : ")
-                .Append(string.Join($",{Environment.NewLine}", Bases).PrefixSpaces(4).WithNewlinePadding(4));
+                .Append(string.Join($",{Environment.NewLine}", Bases).Prefix(4).WithNewlinePadding(4));
         }
 
         if (GenericConstraints.Count > 0)
         {
             builder
                 .AppendLine()
-                .Append(string.Join(Environment.NewLine, GenericConstraints).PrefixSpaces(4).WithNewlinePadding(4));
+                .Append(string.Join(Environment.NewLine, GenericConstraints).Prefix(4).WithNewlinePadding(4));
         }
 
         if (HasBrackets)
@@ -294,7 +294,7 @@ public readonly record struct TypeSpec(
             var formatted = string
                 .Join(
                     string.Join(string.Empty, Enumerable.Range(0, seperation).Select(_ => Environment.NewLine)),
-                    arr.Select(x => x.ToString().PrefixSpaces(padding).WithNewlinePadding(padding))
+                    arr.Select(x => x.ToString().Prefix(padding).WithNewlinePadding(padding))
                 );
 
             if (formatted == string.Empty) return;

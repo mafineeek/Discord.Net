@@ -15,7 +15,7 @@ public class HierarchyNode :
     )
     {
         public static HierarchyContext? Create(
-            LinkActorTargets.GenerationTarget context,
+            ActorsTask.ActorSymbols context,
             NodeProviders.Hierarchy hierarchyInfo)
         {
             var attribute = context.GetCoreActor()
@@ -41,7 +41,7 @@ public class HierarchyNode :
                         .ToImmutableEquatableArray(),
                     _ => []
                 }
-                : hierarchyInfo.Children.ToImmutableEquatableArray();
+                : hierarchyInfo.Children.Where(x => x.Actor.Generics.Length == 0).ToImmutableEquatableArray();
 
             if (hierarchy.Count == 0) return null;
 
@@ -64,7 +64,7 @@ public class HierarchyNode :
         
         public IEnumerable<PropertySpec> GetPropertySpecs()
         {
-            var actor = ActorInfo;
+            var actor = ActorInfo.Actor;
             var isTemplate = IsTemplate;
             var relativePath = Path.FormatRelative();
             var overloads = Overloads;

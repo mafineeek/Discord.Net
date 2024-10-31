@@ -6,7 +6,6 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection;
-using Discord.Net.Hanz.Tasks.Actors.Links.V4;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5;
 using Discord.Net.Hanz.Tasks.Actors.V3;
 

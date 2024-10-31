@@ -13,7 +13,7 @@ public static class SyntaxUtils
     public const string SingleFormatString = "G9";
 
     public static string FormatLiteral(object? value, TypeRef type)
-        => FormatLiteral(value, type.FullyQualifiedName);
+        => FormatLiteral(value, type.DisplayString);
     
     public static string FormatLiteral(object? value, string fullyQualifiedTypeName)
     {

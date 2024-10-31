@@ -1,77 +1,92 @@
-// using Discord.Net.Hanz.Tasks.Actors.Links.V4.SourceTypes;
-// using Discord.Net.Hanz.Tasks.Actors.V3;
-// using LinkTarget = Discord.Net.Hanz.Tasks.Actors.V3.LinkActorTargets.GenerationTarget;
-//
-// namespace Discord.Net.Hanz.Tasks.Actors.Links.V4.Nodes.Types;
-//
-// public class DefinedNode(LinkTarget target, LinkSchematics.Entry entry) : LinkTypeNode(target, entry)
-// {
-//     private protected override void Visit(NodeContext context, Logger logger)
-//     {
-//         Properties.Clear();
-//         Properties.Add(new Property("Ids", $"IReadOnlyCollection<{Target.Id}>"));
-//         
-//         base.Visit(context, logger);
-//         
-//         RedefinesLinkMembers = Ancestors.Count > 0;
-//     }
-//
-//     protected override void AddMembers(List<string> members, NodeContext context, Logger logger)
-//     {
-//         if (!IsTemplate || !RedefinesLinkMembers) return;
-//         
-//         members.AddRange([
-//             $"new IReadOnlyCollection<{Target.Id}> Ids {{ get; }}",
-//             $"IReadOnlyCollection<{Target.Id}> {FormattedLinkType}.Defined.Ids => Ids;",
-//         ]);
-//
-//         if (ParentLinks.Any())
-//         {
-//             members.AddRange([
-//                 $"IReadOnlyCollection<{Target.Id}> {Target.Actor}.{LinksV4.FormatTypeName(Entry.Symbol)}.Ids => Ids;"
-//             ]);
-//         }
-//
-//         foreach (var ancestor in Ancestors)
-//         {
-//             var overrideType =
-//                 $"{(
-//                     ancestor.Ancestors.Count > 0
-//                         ? $"{ancestor.Target.Actor}{FormatRelativeTypePath()}"
-//                         : ancestor.FormattedLinkType
-//                 )}.Defined";
-//
-//
-//             members.AddRange([
-//                 $"IReadOnlyCollection<{ancestor.Target.Id}> {overrideType}.Ids => Ids;"
-//             ]);
-//         }
-//     }
-//
-//     protected override void CreateImplementation(
-//         List<string> members,
-//         List<string> bases,
-//         NodeContext context,
-//         Logger logger)
-//     {
-//         switch (Target.Assembly)
-//         {
-//             case LinkActorTargets.AssemblyTarget.Rest:
-//                 CreateRestImplementation(members, bases, context, logger);
-//                 break;
-//         }   
-//     }
-//
-//     private void CreateRestImplementation(
-//         List<string> members,
-//         List<string> bases,
-//         NodeContext context,
-//         Logger logger)
-//     {
-//         var overrideType = RedefinesLinkMembers ? FormatAsTypePath() : $"{FormattedCoreLinkType}.Defined";
-//         members.AddRange([
-//             $"IReadOnlyCollection<{Target.Id}> {FormattedLinkType}.Defined.Ids => Ids;",
-//             $"IReadOnlyCollection<{Target.Id}> {overrideType}.Ids => Ids;"
-//         ]);
-//     }
-// }
+using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
+using Discord.Net.Hanz.Utils.Bakery;
+using Microsoft.CodeAnalysis;
+
+namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
+
+public class DefinedNode :
+    Node,
+    ILinkImplmenter
+{
+    public readonly record struct State(
+        ActorInfo Actor,
+        ImmutableEquatableArray<(string Id, string OverrideTarget)> AncestorOverrides)
+    {
+        public static State Create(
+            LinkNode.State link,
+            Grouping<string, ActorInfo> ancestors)
+        {
+            return new State(
+                link.ActorInfo,
+                ancestors
+                    .GetGroupOrEmpty(link.ActorInfo.Actor.DisplayString)
+                    .Select(x =>
+                        (
+                            x.Id.DisplayString,
+                            ancestors.GetGroupOrEmpty(x.Actor.DisplayString).Count > 0
+                                ? $"{x.Actor}.{link.Path.FormatRelative()}"
+                                : $"{x.FormattedLinkType}.Defined"
+                        )
+                    )
+                    .ToImmutableEquatableArray()
+            );
+        }
+    }
+
+    private readonly IncrementalValueProvider<Grouping<string, ActorInfo>> _ancestors;
+
+    public DefinedNode(NodeProviders providers, Logger logger) : base(providers, logger)
+    {
+        _ancestors = providers.ActorAncestors;
+    }
+
+    public IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> Branch(
+        IncrementalValuesProvider<Branch<LinkNode.State>> provider)
+    {
+        return provider
+            .Where(x => x.Entry.Type.Name == "Defined")
+            .Combine(_ancestors)
+            .Select((tuple, _) => tuple.Left.Mutate(State.Create(tuple.Left.Value, tuple.Right)))
+            .Select(CreateImplmentation);
+    }
+
+    private ILinkImplmenter.LinkImplementation CreateImplmentation(State state, CancellationToken token)
+    {
+        return new ILinkImplmenter.LinkImplementation(
+            CreateInterfaceSpec(state, token),
+            CreateImplementationSpec(state, token)
+        );
+    }
+
+    private ILinkImplmenter.LinkSpec CreateInterfaceSpec(State state, CancellationToken token)
+    {
+        return new ILinkImplmenter.LinkSpec(
+            Properties: new([
+                new PropertySpec(
+                    Type: $"IReadOnlyCollection<{state.Actor.Id}>",
+                    Name: "Ids",
+                    Modifiers: new(["new"])
+                ),
+                new PropertySpec(
+                    Type: $"IReadOnlyCollection<{state.Actor.Id}>",
+                    Name: "Ids",
+                    ExplicitInterfaceImplementation: $"{state.Actor.FormattedLinkType}.Defined",
+                    Expression: "Ids"
+                ),
+                ..state.AncestorOverrides.Select(x =>
+                    new PropertySpec(
+                        Type: $"IReadOnlyCollection<{x.Id}>",
+                        Name: "Ids",
+                        ExplicitInterfaceImplementation: x.OverrideTarget,
+                        Expression: "Ids"
+                    )
+                )
+            ])
+        );
+    }
+
+    private ILinkImplmenter.LinkSpec CreateImplementationSpec(State state, CancellationToken token)
+    {
+        return ILinkImplmenter.LinkSpec.Empty;
+    }
+}

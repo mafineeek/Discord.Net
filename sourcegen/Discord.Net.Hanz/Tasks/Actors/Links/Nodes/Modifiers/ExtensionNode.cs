@@ -94,7 +94,7 @@ public class ExtensionNode :
         }
 
         public static IEnumerable<Extension> GetExtensions(
-            LinkActorTargets.GenerationTarget target,
+            ActorsTask.ActorSymbols target,
             CancellationToken cancellationToken)
         {
             var types = target
@@ -144,7 +144,7 @@ public class ExtensionNode :
             .Actors
             .SelectMany(Extension.GetExtensions)
             .Combine(
-                providers.ActorInfos
+                providers.ActorInfoGrouping
             )
             .Select((tuple, _) => tuple.Left.UpdateWithActorInfos(tuple.Right))
             .GroupBy(x => x.Actor);
@@ -175,13 +175,20 @@ public class ExtensionNode :
             GetInstance<BackLinkNode>()
         );
 
-        return ApplyPathNesting(nestedProvider).Select((x, _) => x.Spec);
+        return NestTypesViaPaths(nestedProvider).Select((x, _) => x.Spec);
     }
 
     private IEnumerable<StatefulGeneration<ExtensionContext>> BuildExtensions(
         BuildContext context,
         CancellationToken token)
     {
+        using var logger = Logger
+            .GetSubLogger(context.ActorInfo.Assembly.ToString())
+            .GetSubLogger(nameof(BuildExtensions))
+            .GetSubLogger(context.ActorInfo.Actor.MetadataName);
+
+        logger.Log($"Building {context.Extensions.Count} extensions...");
+
         foreach (var extension in context.Extensions)
         foreach (var result in Build(extension, context.Extensions.Remove(extension), context.Path))
         {
@@ -194,9 +201,13 @@ public class ExtensionNode :
         IEnumerable<StatefulGeneration<ExtensionContext>> Build(
             Extension extension,
             ImmutableEquatableArray<Extension> next,
-            TypePath path)
+            TypePath path,
+            int depth = 0)
         {
             var extensionPath = path.Add<ExtensionNode>(extension.Name);
+
+            logger.Log($" - {extension.Name} -> {path}".Prefix(depth * 2));
+
             yield return BuildExtension(context.ActorInfo, extensionPath, extension);
 
             token.ThrowIfCancellationRequested();
@@ -205,51 +216,19 @@ public class ExtensionNode :
 
             var nextExtensions = next.Remove(extension);
 
-            foreach (var child in next)
+            foreach (var child in nextExtensions)
             foreach
             (
                 var result
                 in Build(
                     child,
                     nextExtensions,
-                    extensionPath
+                    extensionPath,
+                    depth + 1
                 )
             )
                 yield return result;
         }
-    }
-
-
-    private TypeSpec BuildExtensionGraph(
-        TypeSpec extension,
-        ImmutableArray<TypeSpec> children,
-        BuildContext context,
-        TypePath extensionPath)
-    {
-        if (extensionPath.IsEmpty)
-        {
-            return extension.AddNestedTypes(
-                children.Select(x =>
-                    BuildExtensionGraph(
-                        x,
-                        children.Remove(x),
-                        context,
-                        extensionPath.Add<ExtensionNode>(x.Name)
-                    )
-                )
-            );
-        }
-
-        var newBases = new ImmutableEquatableArray<string>([(context.Path + extensionPath).ToString()]);
-
-        for (var i = 1; i < extensionPath.Count; i++)
-        {
-            newBases = newBases.Add(
-                context.Path + extensionPath.Slice(0, i) + (typeof(ExtensionNode), extension.Name)
-            );
-        }
-
-        return extension with {Bases = newBases};
     }
 
     private StatefulGeneration<ExtensionContext> BuildExtension(
@@ -271,6 +250,16 @@ public class ExtensionNode :
                 $"   - {property.Name}: {{ {property.PropertyKind}, {property.Type}, Has Actor: {property.ActorInfo.HasValue}, Is On Path: {property.IsDefinedOnPath(path)} }} ");
         }
 
+        var bases = ImmutableEquatableArray<string>.Empty;
+
+        if (path.First.HasValue && !path.Equals(typeof(ActorNode), typeof(ExtensionNode)))
+        {
+            bases = bases.AddRange(
+                (path.First.Value + path.Slice(1).SemanticalProduct())
+                .Select(x => x.ToString())
+            );
+        }
+
         return new StatefulGeneration<ExtensionContext>(
             new(extension, actorInfo, path),
             new TypeSpec(
@@ -281,9 +270,7 @@ public class ExtensionNode :
                         BuildExtensionProperty(path, x, extension)
                     )
                     .ToImmutableEquatableArray(),
-                Bases: path.Equals(typeof(ActorNode), typeof(ExtensionNode))
-                    ? ImmutableEquatableArray<string>.Empty
-                    : new([path])
+                Bases: bases
             )
         );
     }
@@ -316,7 +303,7 @@ public class ExtensionNode :
             Extension.Property.Kind.BackLinkMirror =>
                 path.Last?.Type == typeof(BackLinkNode)
                     ? $"{property.ActorInfo!.Value.Actor}.BackLink<TSource>"
-                    : property.ActorInfo!.Value.Actor.FullyQualifiedName,
+                    : property.ActorInfo!.Value.Actor.DisplayString,
             _ => throw new ArgumentOutOfRangeException()
         };
 
@@ -347,7 +334,7 @@ public class ExtensionNode :
             case Extension.Property.Kind.BackLinkMirror when path.Last?.Type == typeof(BackLinkNode):
                 yield return new PropertySpec(
                     Name: property.Name,
-                    Type: property.ActorInfo!.Value.Actor.FullyQualifiedName,
+                    Type: property.ActorInfo!.Value.Actor.DisplayString,
                     ExplicitInterfaceImplementation: $"{extension.Actor}.{extension.Name}",
                     Expression: property.Name
                 );

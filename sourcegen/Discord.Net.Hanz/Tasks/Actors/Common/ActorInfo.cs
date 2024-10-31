@@ -1,4 +1,3 @@
-using Discord.Net.Hanz.Tasks.Actors.Links.V4;
 using Discord.Net.Hanz.Tasks.Actors.V3;
 using Discord.Net.Hanz.Utils.Bakery;
 
@@ -10,7 +9,7 @@ public interface IHasActorInfo
 }
 
 public readonly record struct ActorInfo(
-    LinkActorTargets.AssemblyTarget Assembly,
+    ActorsTask.AssemblyTarget Assembly,
     TypeRef Actor,
     TypeRef Entity,
     TypeRef Id,
@@ -19,7 +18,7 @@ public readonly record struct ActorInfo(
     TypeRef CoreEntity
 )
 {
-    public bool IsCore => Assembly is LinkActorTargets.AssemblyTarget.Core;
+    public bool IsCore => Assembly is ActorsTask.AssemblyTarget.Core;
 
     public string FormattedRelation
         => $"Discord.IRelation<{Id}, {Entity}>";
@@ -75,9 +74,9 @@ public readonly record struct ActorInfo(
     public static ActorInfo Create(LinksV5.NodeContext context)
         => Create(context.Target);
     
-    public static ActorInfo Create(LinkActorTargets.GenerationTarget target)
+    public static ActorInfo Create(ActorsTask.ActorSymbols target)
     {
-        var coreActor = target.Assembly is LinkActorTargets.AssemblyTarget.Core
+        var coreActor = target.Assembly is ActorsTask.AssemblyTarget.Core
             ? new TypeRef(target.Actor)
             : new TypeRef(
                 Hierarchy.GetHierarchy(target.Actor, false)
@@ -88,7 +87,7 @@ public readonly record struct ActorInfo(
                     ).Type
             );
 
-        var coreEntity = target.Assembly is LinkActorTargets.AssemblyTarget.Core
+        var coreEntity = target.Assembly is ActorsTask.AssemblyTarget.Core
             ? new TypeRef(target.Actor)
             : new TypeRef(
                 Hierarchy.GetHierarchy(target.Entity, false)

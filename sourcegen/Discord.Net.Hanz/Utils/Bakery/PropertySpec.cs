@@ -88,7 +88,7 @@ public readonly record struct PropertySpec(
             {
                 builder.AppendLine()
                     .AppendLine("{")
-                    .Append(string.Empty.PrefixSpaces(4));
+                    .Append(string.Empty.Prefix(4));
 
                 if (HasAutoGetter && AutoGet is not Accessibility.Public)
                     builder
@@ -110,7 +110,7 @@ public readonly record struct PropertySpec(
                 {
                     builder
                         .AppendLine()
-                        .Append(string.Empty.PrefixSpaces(4));
+                        .Append(string.Empty.Prefix(4));
 
                     if (HasAutoSetter && AutoSet is not Accessibility.Public)
                         builder

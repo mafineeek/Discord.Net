@@ -21,7 +21,7 @@ public sealed class TypeRef(ITypeSymbol type) : IEquatable<TypeRef>
     public string DisplayString { get; } = type.ToDisplayString();
     public string MetadataName { get; } = type.ToFullMetadataName();
     public string ReferenceName { get; } = type.ToDisplayString(DeclarationFormat);
-    public string FullyQualifiedName { get; } = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+    //public string FullyQualifiedName { get; } = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     
     public Accessibility Accessibility { get; } = type.DeclaredAccessibility;
 
@@ -40,9 +40,9 @@ public sealed class TypeRef(ITypeSymbol type) : IEquatable<TypeRef>
             ? genericType.TypeParameters.Select(GenericConstraintSpec.From).Where(x => x != default).ToImmutableArray()
             : ImmutableArray<GenericConstraintSpec>.Empty;
 
-    public override string ToString() => FullyQualifiedName;
+    public override string ToString() => DisplayString;
 
-    public bool Equals(TypeRef? other) => other != null && FullyQualifiedName == other.FullyQualifiedName;
+    public bool Equals(TypeRef? other) => other != null && DisplayString == other.DisplayString;
     public override bool Equals(object? obj) => Equals(obj as TypeRef);
-    public override int GetHashCode() => HashCode.Of(FullyQualifiedName).And(Accessibility);
+    public override int GetHashCode() => HashCode.Of(DisplayString).And(Accessibility);
 }

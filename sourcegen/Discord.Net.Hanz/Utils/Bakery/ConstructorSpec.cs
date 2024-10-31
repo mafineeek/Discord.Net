@@ -33,7 +33,7 @@ public readonly record struct ConstructorSpec(
                         $",{Environment.NewLine}",
                         Parameters
                     )
-                    .PrefixSpaces(4)
+                    .Prefix(4)
                     .WithNewlinePadding(4)
                 );
         }
