@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Text;
-using Discord.Net.Hanz.Introspection;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Tasks.Actors.V3;
 using Discord.Net.Hanz.Utils.Bakery;
@@ -67,7 +66,7 @@ public readonly struct NodeProviders
 
     public IncrementalValuesProvider<Hierarchy> ActorHierarchy { get; }
 
-    public IncrementalValueProvider<Grouping<string, ActorInfo>> ActorInfoGrouping { get; }
+    public IncrementalValueProvider<Keyed<string, ActorInfo>> KeyedActorInfo { get; }
     
     public IncrementalValuesProvider<ActorInfo> ActorInfos { get; }
 
@@ -97,38 +96,11 @@ public readonly struct NodeProviders
         ActorInfos = actors
             .Select((x, _) => ActorInfo.Create(x));
         
-        ActorInfoGrouping = ActorInfos
-            .GroupBy(x => x.Actor.DisplayString);
+        KeyedActorInfo = ActorInfos.ToKeyed(x => x.Actor.DisplayString);
 
         ActorAncestors = ActorHierarchy
             .Collect()
-            .GroupBy(x => x.Actor, x => x.Parents);
-    }
-
-    public void AddIntrospection<T>(string name, IncrementalValuesProvider<T> provider)
-    {
-        _context.RegisterPostInitializationOutput(
-            (context) =>
-            {
-                context.AddSource(
-                    $"Introspection/{name}",
-                    NodeIntrospection.Introspect(provider)
-                );
-            }
-        );
-    }
-    
-    public void AddIntrospection<T>(string name, IncrementalValueProvider<T> provider)
-    {
-        _context.RegisterPostInitializationOutput(
-            (context) =>
-            {
-                context.AddSource(
-                    $"Introspection/{name}",
-                    NodeIntrospection.Introspect(provider)
-                );
-            }
-        );
+            .GroupManyBy(x => x.Actor, x => x.Parents);
     }
     
     public void AddSourceOutput<T>(

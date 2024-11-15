@@ -1,5 +1,4 @@
 using System.Reflection.Metadata;
-using Discord.Net.Hanz.Introspection;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Tasks.Actors.V3;
 using Discord.Net.Hanz.Tasks.Traits;
@@ -9,57 +8,20 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
 
-public class EnumerableNode :
-    Node,
-    ILinkImplmenter
+public class EnumerableNode : BaseLinkNode
 {
-    public readonly record struct StateWithParameterInfo(
-        Branch<State> State,
-        ExtraParameters? ExtraParameters,
+    private readonly record struct State(
+        LinkInfo Info,
+        ExtraParameters ExtraParameters,
         ImmutableEquatableArray<ExtraParameters> AncestorExtraParameters
     )
     {
+        public ActorInfo ActorInfo => Info.ActorInfo;
+
         public bool RedefinesLinkMembers
-            => State.Value.IsTemplate &&
-               (
-                   State.Value.AncestorOverrides.Count > 0
-                   ||
-                   !State.Value.ActorInfo.IsCore
-                   ||
-                   ExtraParameters is {Parameters.Count: > 0}
-               );
-    }
-
-    public readonly record struct State(
-        ActorInfo ActorInfo,
-        ImmutableEquatableArray<(string Actor, string Entity, string OverrideTarget)> AncestorOverrides,
-        bool RedefinesLinkMembers,
-        bool IsTemplate
-    )
-    {
-        public static State Create(
-            LinkNode.State link,
-            Grouping<string, ActorInfo> ancestorGrouping)
-        {
-            var ancestors = ancestorGrouping.GetGroupOrEmpty(link.ActorInfo.Actor.DisplayString);
-
-            return new State(
-                link.ActorInfo,
-                new(
-                    ancestors.Select(x =>
-                        (
-                            x.Actor.DisplayString,
-                            x.Entity.DisplayString,
-                            ancestorGrouping.GetGroupOrEmpty(x.Actor.DisplayString).Count > 0
-                                ? $"{x.Actor}.{link.Path.FormatRelative()}"
-                                : $"{x.FormattedLinkType}.Enumerable"
-                        )
-                    )
-                ),
-                link.IsTemplate || ancestors.Count > 0,
-                link.IsTemplate
-            );
-        }
+            => ExtraParameters.Parameters.Count > 0 ||
+               Info.IsTemplate ||
+               Info.Ancestors.Count > 0;
     }
 
     public readonly record struct ExtraParameters(
@@ -67,6 +29,8 @@ public class EnumerableNode :
         ImmutableEquatableArray<ParameterSpec> Parameters
     )
     {
+        public bool HasAny => Parameters.Count > 0;
+
         public static ExtraParameters Create(
             ActorsTask.ActorSymbols target,
             CancellationToken token)
@@ -146,8 +110,9 @@ public class EnumerableNode :
     }
 
 
-    private readonly IncrementalValueProvider<Grouping<string, ExtraParameters>> _extraParametersProvider;
+    private readonly IncrementalValueProvider<Keyed<string, ExtraParameters>> _extraParametersProvider;
     private readonly IncrementalValueProvider<Grouping<string, ActorInfo>> _ancestors;
+    private readonly IncrementalValueProvider<Grouping<string, ExtraParameters>> _ancestorExtraParameters;
 
     public EnumerableNode(
         NodeProviders providers,
@@ -160,64 +125,69 @@ public class EnumerableNode :
             .Actors
             .Select(ExtraParameters.Create)
             .Where(x => x.Parameters.Count > 0)
-            .GroupBy(x => x.Actor);
-    }
+            .ToKeyed(x => x.Actor);
 
-    public IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> Branch(
-        IncrementalValuesProvider<Branch<LinkNode.State>> provider)
-    {
-
-        
-        return provider
-            .Where(x => x.Value.Entry.Type.Name == "Enumerable")
-            .Combine(_ancestors)
-            .Select((tuple, _) => tuple.Left
-                .Mutate(State.Create(tuple.Left.Value, tuple.Right))
-            )
-            .Combine(
+        _ancestorExtraParameters = _ancestors
+            .Mixin(
                 _extraParametersProvider,
-                branch => branch.Value.ActorInfo.Actor.DisplayString,
-                (branch, extraParameters, graph) => new StateWithParameterInfo(
-                    branch,
-                    extraParameters.Count > 0 ? extraParameters[0] : null,
-                    new(
-                        branch.Value
-                            .AncestorOverrides
-                            .SelectMany(x =>
-                                graph.GetGroupOrEmpty(x.Actor)
-                            )
+                (key, ancestors, keyed) => ancestors
+                    .Select(ancestor =>
+                        keyed.GetValueOrDefault(ancestor.Actor.DisplayString)
                     )
-                )
-            )
-            .Where(x => x.RedefinesLinkMembers)
-            .Select((context, token) => context
-                .State
-                .Mutate(
-                    CreateImplementation(context, token)
-                )
             );
     }
 
+    protected override bool ShouldContinue(LinkNode.State linkState, CancellationToken token)
+        => linkState.Entry.Type.Name == "Enumerable";
+
+    protected override IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> CreateImplementation(
+        IncrementalValuesProvider<Branch<LinkInfo>> provider
+    )
+    {
+        return provider
+            .Combine(
+                _extraParametersProvider,
+                branch => branch.Value.ActorInfo.Actor.DisplayString,
+                (_, extraParameters, branch) => branch.Mutate(
+                    (Info: branch.Value, ExtraParameters: extraParameters)
+                )
+            )
+            .Combine(
+                _ancestorExtraParameters,
+                branch => branch.Value.Info.ActorInfo.Actor.DisplayString,
+                (branch, ancestorExtraParameters) => branch.Mutate(
+                    new State(branch.Value.Info, branch.Value.ExtraParameters, ancestorExtraParameters)
+                )
+            )
+            .Where((x, _) => x.RedefinesLinkMembers)
+            .Select(CreateImplementation);
+    }
+
+    private static string GetOverrideTarget(LinkInfo info, AncestorInfo ancestor)
+        => ancestor.HasAncestors
+            ? $"{ancestor.ActorInfo.Actor}.{info.State.Path.FormatRelative()}"
+            : $"{ancestor.ActorInfo.FormattedLinkType}.Enumerable";
+    
     private ILinkImplmenter.LinkImplementation CreateImplementation(
-        StateWithParameterInfo context,
+        State state,
         CancellationToken token
     ) => new(
-        CreateInterfaceSpec(context, token),
-        CreateImplementationSpec(context, token)
+        CreateInterfaceSpec(state, token),
+        CreateImplementationSpec(state, token)
     );
 
     private ILinkImplmenter.LinkSpec CreateInterfaceSpec(
-        StateWithParameterInfo context,
+        State state,
         CancellationToken token)
     {
         using var logger = Logger
-            .GetSubLogger(context.State.Value.ActorInfo.Assembly.ToString())
+            .GetSubLogger(state.ActorInfo.Assembly.ToString())
             .GetSubLogger(nameof(CreateInterfaceSpec))
-            .GetSubLogger(context.State.Value.ActorInfo.Actor.MetadataName);
+            .GetSubLogger(state.ActorInfo.Actor.MetadataName);
 
-        logger.Log($"{context.State.Value.ActorInfo.Actor}");
-        logger.Log($" - {context.State.Value.RedefinesLinkMembers}");
-        logger.Log($" - {context.ExtraParameters}");
+        logger.Log($"{state.ActorInfo.Actor}");
+        logger.Log($" - {state.RedefinesLinkMembers}");
+        logger.Log($" - {state.ExtraParameters}");
 
         var parameters = new ImmutableEquatableArray<ParameterSpec>([
             ("RequestOptions?", "options", "null"),
@@ -226,10 +196,10 @@ public class EnumerableNode :
 
         var parametersWithExtra = parameters;
 
-        if (context.ExtraParameters.HasValue)
+        if (state.ExtraParameters.HasAny)
         {
             parametersWithExtra = new([
-                ..context.ExtraParameters.Value.Parameters,
+                ..state.ExtraParameters.Parameters,
                 ..parameters
             ]);
         }
@@ -238,30 +208,30 @@ public class EnumerableNode :
             Methods: new ImmutableEquatableArray<MethodSpec>([
                 new MethodSpec(
                     Name: "AllAsync",
-                    ReturnType: $"ITask<IReadOnlyCollection<{context.State.Value.ActorInfo.Entity}>>",
+                    ReturnType: $"ITask<IReadOnlyCollection<{state.ActorInfo.Entity}>>",
                     Parameters: parametersWithExtra,
                     Modifiers: new(["new"])
                 ),
                 new MethodSpec(
                     Name: "AllAsync",
-                    ReturnType: $"ITask<IReadOnlyCollection<{context.State.Value.ActorInfo.Entity}>>",
+                    ReturnType: $"ITask<IReadOnlyCollection<{state.ActorInfo.Entity}>>",
                     Parameters: parameters,
-                    ExplicitInterfaceImplementation: $"{context.State.Value.ActorInfo.FormattedLinkType}.Enumerable",
+                    ExplicitInterfaceImplementation: $"{state.ActorInfo.FormattedLinkType}.Enumerable",
                     Expression: "AllAsync(options: options, token: token)"
                 )
             ])
         );
 
-        foreach (var ancestor in context.State.Value.AncestorOverrides)
+        foreach (var ancestor in state.Info.Ancestors)
         {
             var overrideParameters = parameters;
 
             if (
-                context.ExtraParameters.HasValue &&
-                context.AncestorExtraParameters
-                        .FirstOrDefault(x => x.Actor == ancestor.Actor)
+                state.ExtraParameters.HasAny &&
+                state.AncestorExtraParameters
+                        .FirstOrDefault(x => x.Actor == ancestor.ActorInfo.Actor.DisplayString)
                     is { } ancestorExtra &&
-                ancestorExtra.Parameters.Equals(context.ExtraParameters.Value.Parameters)
+                ancestorExtra.Parameters.Equals(state.ExtraParameters.Parameters)
             )
             {
                 overrideParameters = parametersWithExtra;
@@ -272,9 +242,9 @@ public class EnumerableNode :
                 Methods = spec.Methods.AddRange(
                     new MethodSpec(
                         Name: "AllAsync",
-                        ReturnType: $"ITask<IReadOnlyCollection<{ancestor.Entity}>>",
+                        ReturnType: $"ITask<IReadOnlyCollection<{ancestor.ActorInfo.Entity}>>",
                         Parameters: overrideParameters,
-                        ExplicitInterfaceImplementation: ancestor.OverrideTarget,
+                        ExplicitInterfaceImplementation: GetOverrideTarget(state.Info, ancestor),
                         Expression:
                         $"AllAsync({string.Join(", ", overrideParameters.Select(x => $"{x.Name}: {x.Name}"))})"
                     )
@@ -286,7 +256,7 @@ public class EnumerableNode :
     }
 
     private ILinkImplmenter.LinkSpec CreateImplementationSpec(
-        StateWithParameterInfo context,
+        State context,
         CancellationToken token)
     {
         return ILinkImplmenter.LinkSpec.Empty;

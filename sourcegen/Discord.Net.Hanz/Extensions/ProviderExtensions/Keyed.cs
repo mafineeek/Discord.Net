@@ -4,112 +4,170 @@ using Microsoft.CodeAnalysis;
 
 namespace Discord.Net.Hanz;
 
-public readonly record struct Keyed<TKey, TValue>(
-    TKey Key,
-    TValue Value
-);
-
-public sealed class KeyedCollection<TKey, TValue>
+public static class KeyedExtensions
 {
-    private readonly Func<TValue, TKey> _keySelector;
-    private readonly Dictionary<TKey, TValue> _dictionary;
-    private HashSet<TValue> _buffer;
-
-    private int _hash;
-    
-    private KeyedCollection(Func<TValue, TKey> keySelector)
+    public static TValue? GetValueOrDefault<TKey, TValue>(
+        this Keyed<TKey, TValue> keyed,
+        TKey key,
+        TValue? defaultValue = default
+    )
+        where TValue : struct
     {
-        _keySelector = keySelector;
-        _dictionary = [];
-        _buffer = [];
+        if (keyed.TryGetValue(key, out var value))
+            return value;
+
+        return defaultValue;
+    }
+}
+
+public sealed class Keyed<TKey, TValue>
+{
+    public Dictionary<TKey, TValue>.KeyCollection Keys => _entries.Keys;
+    public Dictionary<TKey, TValue>.ValueCollection Values => _entries.Values;
+
+    private readonly Dictionary<TKey, TValue> _entries;
+
+    private readonly object _lock;
+
+    private int _version;
+
+    public bool TryGetValue(TKey key, out TValue value)
+    {
+        lock (_lock)
+        {
+            return _entries.TryGetValue(key, out value);
+        }
     }
 
-    private TValue OnModified(TValue value)
-    {
-        _buffer.Add(value);
-        return value;
-    }
+    public TValue? GetValueOrDefault(TKey key, TValue? defaultValue = default)
+        => TryGetValue(key, out var result) ? result : defaultValue;
 
-    private KeyedCollection<TKey, TValue> OnBatch(ImmutableArray<TValue> values)
+    private Keyed<TKey, TValue> OnBatch(
+        ImmutableArray<(TKey Key, TValue Value)> batch,
+        CancellationToken token
+    )
     {
-        _hash = HashCode.OfEach(values);
-        
-        if (_dictionary.Count == 0)
+        lock (_lock)
         {
-            foreach (var value in values)
+            token.ThrowIfCancellationRequested();
+
+            _entries.Clear();
+
+            foreach (var (key, value) in batch)
             {
-                _dictionary[_keySelector(value)] = value;
+                _entries[key] = value;
+
+                token.ThrowIfCancellationRequested();
             }
 
-            _buffer.Clear();
-            return this;
-        }
-
-        if (values.Length - _buffer.Count < _dictionary.Count)
-        {
-            // some were removed
-            foreach (var value in values)
+            unchecked
             {
-                if (!_dictionary.ContainsValue(value))
-                    _dictionary.Remove(_keySelector(value));
+                _version++;
             }
         }
-
-        foreach (var value in _buffer)
-        {
-            _dictionary[_keySelector(value)] = value;
-        }
-
-        _buffer.Clear();
 
         return this;
     }
 
-    public static IncrementalValueProvider<KeyedCollection<TKey, TValue>> Create(
-        IncrementalValuesProvider<TValue> provider,
-        Func<TValue, TKey> keySelector
+    public override int GetHashCode()
+        => _version;
+
+    public static IncrementalValueProvider<Keyed<TKey, TValue>> Create(
+        IncrementalValueProvider<ImmutableArray<(TKey, TValue)>> provider
     )
     {
-        var collection = new KeyedCollection<TKey, TValue>(keySelector);
-
-        return provider
-            .Select((x, _) => collection.OnModified(x))
-            .Collect()
-            .Select((values, _) => collection.OnBatch(values));
+        var keyed = new Keyed<TKey, TValue>();
+        return provider.Select(keyed.OnBatch);
     }
-
-    public static IncrementalValuesProvider<Keyed<TSource, TValue>> Join<TSource, TKey, TValue>(
-        IncrementalValuesProvider<TSource> provider,
-        IncrementalValueProvider<KeyedCollection<TKey, TValue>> collection,
-        Func<TSource, TKey> keySelector)
-    {
-        return provider
-            .Select((value, _) => (Key: keySelector(value), Value: value))
-            .Combine(collection)
-            .SelectMany((x, _) =>
-                x.Right._dictionary.TryGetValue(x.Left.Key, out var match)
-                    ? ImmutableArray.Create(new Keyed<TSource, TValue>(x.Left.Value, match))
-                    : ImmutableArray<Keyed<TSource, TValue>>.Empty
-            );
-    }
-
-    public override int GetHashCode()
-        => _hash;
-
-    public override bool Equals(object? obj)
-        => obj is KeyedCollection<TKey, TValue> collection && collection._hash == _hash;
 }
 
 public static partial class ProviderExtensions
 {
-    public static IncrementalValueProvider<KeyedCollection<TKey, TValue>> ToKeyed<TKey, TValue>(
+    public static IncrementalValueProvider<Keyed<TKey, TValue>> ToKeyed<TKey, TValue>(
         this IncrementalValuesProvider<TValue> provider,
         Func<TValue, TKey> keySelector
-    ) => KeyedCollection<TKey, TValue>.Create(provider, keySelector);
+    ) => Keyed<TKey, TValue>.Create(
+        provider.Select((x, _) => (keySelector(x), x)).Collect()
+    );
 
-    public static IncrementalValuesProvider<Keyed<TSource, TValue>> Join<TSource, TKey, TValue>(
-        this IncrementalValueProvider<KeyedCollection<TKey, TValue>> collection,
+    public static IncrementalValuesProvider<(TSource Source, TValue? Value)> Join<TKey, TValue, TSource, TResult>(
+        this IncrementalValueProvider<Keyed<TKey, TValue>> keyed,
         IncrementalValuesProvider<TSource> source,
+        Func<TSource, TKey> keySelector,
+        TValue? defaultValue = default
+    ) => Join(
+        keyed,
+        source,
+        keySelector,
+        (TSource Source, TValue? Value) (key, value, source) => (source, value),
+        defaultValue
+    );
+
+    public static IncrementalValuesProvider<TResult> Combine<TKey, TValue, TSource, TResult>(
+        this IncrementalValuesProvider<TSource> source,
+        IncrementalValueProvider<Keyed<TKey, TValue>> keyed,
+        Func<TSource, TKey> keySelector,
+        Func<TKey, TValue?, TSource, TResult> resultSelector,
+        TValue? defaultValue = default
+    ) => Join(keyed, source, keySelector, resultSelector, defaultValue);
+
+    public static IncrementalValuesProvider<TResult> Combine<TKey, TValue, TSource, TResult>(
+        this IncrementalValueProvider<ImmutableArray<TSource>> source,
+        IncrementalValueProvider<Keyed<TKey, TValue>> keyed,
+        Func<TSource, TKey> keySelector,
+        Func<TKey, TValue?, TSource, TResult> resultSelector,
+        TValue? defaultValue = default
+    ) => Join(keyed, source, keySelector, resultSelector, defaultValue);
+
+    public static IncrementalValuesProvider<TResult> Join<TKey, TValue, TSource, TResult>(
+        this IncrementalValueProvider<Keyed<TKey, TValue>> keyed,
+        IncrementalValuesProvider<TSource> source,
+        Func<TSource, TKey> keySelector,
+        Func<TKey, TValue?, TSource, TResult> resultSelector,
+        TValue? defaultValue = default
+    )
+    {
+        return source
+            .Select((x, _) => (Key: keySelector(x), Source: x))
+            .Combine(keyed)
+            .Select((pair, _) => resultSelector(
+                pair.Left.Key,
+                pair.Right.GetValueOrDefault(pair.Left.Key, defaultValue),
+                pair.Left.Source
+            ));
+    }
+
+    public static IncrementalValuesProvider<TResult> Join<TKey, TValue, TSource, TResult>(
+        this IncrementalValueProvider<Keyed<TKey, TValue>> keyed,
+        IncrementalValueProvider<ImmutableArray<TSource>> source,
+        Func<TSource, TKey> keySelector,
+        Func<TKey, TValue?, TSource, TResult> resultSelector,
+        TValue? defaultValue = default
+    )
+    {
+        return source
+            .SelectMany((sources, _) => sources.Select(source => (Key: keySelector(source), Source: source)))
+            .Combine(keyed)
+            .Select((pair, _) => resultSelector(
+                pair.Left.Key,
+                pair.Right.GetValueOrDefault(pair.Left.Key, defaultValue),
+                pair.Left.Source
+            ));
+    }
+
+    public static IncrementalValuesProvider<TValue> Map<TSource, TKey, TValue>(
+        this IncrementalValuesProvider<TSource> source,
+        IncrementalValueProvider<Keyed<TKey, TValue>> keyed,
         Func<TSource, TKey> keySelector
-    ) => KeyedCollection<TKey, TValue>.Join(source, collection, keySelector);
+    )
+    {
+        return source
+            .Select((x, _) => keySelector(x))
+            .Combine(keyed)
+            .SelectMany((pair, _) =>
+                pair.Right.TryGetValue(pair.Left, out var value)
+                    ? ImmutableArray.Create(value)
+                    : ImmutableArray<TValue>.Empty
+            );
+    }
 }

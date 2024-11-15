@@ -41,8 +41,6 @@ public class BackLinkNode :
     public IncrementalValuesProvider<Branch<TypeSpec>> Create<TSource>(
         IncrementalValuesProvider<Branch<(NestedTypeProducerContext Parameters, TSource Source)>> provider)
     {
-        NodeIntrospection.Introspect(provider);
-
         return provider
             .Select((context, token) => State<TSource>.Create(context.Parameters, context.Source))
             .Select(Build);

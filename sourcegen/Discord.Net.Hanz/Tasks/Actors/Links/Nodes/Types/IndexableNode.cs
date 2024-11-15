@@ -5,58 +5,20 @@ using Microsoft.CodeAnalysis;
 
 namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
 
-public class IndexableNode : 
-    Node,
-    ILinkImplmenter
+public class IndexableNode : BaseLinkNode
 {
-    private readonly record struct State(
-        ActorInfo ActorInfo,
-        bool RedefinesLinkMembers,
-        ImmutableEquatableArray<(string Actor, string OverrideTarget)> AncestorOverrides
-    )
-    {
-        public static State Create(LinkNode.State link, Grouping<string, ActorInfo> ancestorGrouping)
-        {
-            var ancestors = ancestorGrouping.GetGroupOrEmpty(link.ActorInfo.Actor.DisplayString);
-            
-            return new State(
-                link.ActorInfo,
-                ancestors.Count > 0 || !link.ActorInfo.IsCore,
-                new(
-                    ancestors
-                        .Select(x =>
-                            (
-                                x.Actor.DisplayString,
-                                ancestorGrouping.GetGroupOrEmpty(x.Actor.DisplayString).Count > 0
-                                    ? $"{x.Actor}.{link.Path.FormatRelative()}"
-                                    : $"{x.FormattedLinkType}.Indexable"
-                            )
-                        )
-                )
-            );
-        }
-    }
-    
-    private readonly IncrementalValueProvider<Grouping<string, ActorInfo>> _ancestors;
-    
     public IndexableNode(NodeProviders providers, Logger logger) : base(providers, logger)
     {
-        _ancestors = providers.ActorAncestors;
-    }
-    
-    public IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> Branch(
-        IncrementalValuesProvider<Branch<LinkNode.State>> provider)
-    {
-        return provider
-            .Where(x => x.Value is {IsTemplate: true, Entry.Type.Name: "Indexable"})
-            .Combine(_ancestors)
-            .Select((tuple, _) => tuple.Left
-                .Mutate(State.Create(tuple.Left.Value, tuple.Right))
-            )
-            .Select((x, token) => x.Mutate(Build(x.Value, token)));
     }
 
-    private ILinkImplmenter.LinkImplementation Build(State state, CancellationToken token)
+    protected override bool ShouldContinue(LinkNode.State linkState, CancellationToken token)
+        => linkState.Entry.Type.Name == "Indexable" && linkState.IsTemplate;
+
+    protected override IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> CreateImplementation(
+        IncrementalValuesProvider<Branch<LinkInfo>> provider
+    ) => provider.Select(Build);
+
+    private ILinkImplmenter.LinkImplementation Build(LinkInfo state, CancellationToken token)
     {
         using var logger = Logger
             .GetSubLogger(state.ActorInfo.Assembly.ToString())
@@ -72,51 +34,59 @@ public class IndexableNode :
         );
     }
 
-    private static ILinkImplmenter.LinkSpec CreateInterfaceSpec(State state, CancellationToken token)
+    private static string GetOverrideTarget(LinkInfo info, AncestorInfo ancestor)
+        => ancestor.HasAncestors
+            ? $"{ancestor.ActorInfo.Actor}.{info.State.Path.FormatRelative()}"
+            : $"{ancestor.ActorInfo.FormattedLinkType}.Indexable";
+
+    private static ILinkImplmenter.LinkSpec CreateInterfaceSpec(LinkInfo info, CancellationToken token)
     {
+        var redefinesLinkMembers = info.Ancestors.Count > 0 || !info.ActorInfo.IsCore;
+        
+        
         var spec = new ILinkImplmenter.LinkSpec(
             Indexers: new([
                 new IndexerSpec(
-                    Type: state.ActorInfo.Actor.DisplayString,
-                    Modifiers: new(state.RedefinesLinkMembers ? ["new"] : []),
+                    Type: info.ActorInfo.Actor.DisplayString,
+                    Modifiers: new(redefinesLinkMembers ? ["new"] : []),
                     Accessibility: Accessibility.Internal,
                     Parameters: new([
-                        (state.ActorInfo.FormattedIdentifiable, "identity")
+                        (info.ActorInfo.FormattedIdentifiable, "identity")
                     ]),
                     Expression: "identity.Actor ?? GetActor(identity.Id)"
                 )
             ])
         );
 
-        if (!state.ActorInfo.IsCore)
+        if (!info.ActorInfo.IsCore)
         {
             spec = spec with
             {
                 Indexers = spec.Indexers.AddRange(
                     new IndexerSpec(
-                        Type: state.ActorInfo.CoreActor.DisplayString,
+                        Type: info.ActorInfo.CoreActor.DisplayString,
                         Parameters: new([
-                            (state.ActorInfo.FormattedIdentifiable, "identity")
+                            (info.ActorInfo.FormattedIdentifiable, "identity")
                         ]),
                         Expression: "identity.Actor ?? GetActor(identity.Id)",
-                        ExplicitInterfaceImplementation: $"{state.ActorInfo.CoreActor}.Indexable"
+                        ExplicitInterfaceImplementation: $"{info.ActorInfo.CoreActor}.Indexable"
                     ),
                     new IndexerSpec(
-                        Type: state.ActorInfo.CoreActor.DisplayString,
+                        Type: info.ActorInfo.CoreActor.DisplayString,
                         Parameters: new([
-                            (state.ActorInfo.Id.DisplayString, "id")
+                            (info.ActorInfo.Id.DisplayString, "id")
                         ]),
                         Expression: "this[id]",
-                        ExplicitInterfaceImplementation: $"{state.ActorInfo.FormattedCoreLinkType}.Indexable"
+                        ExplicitInterfaceImplementation: $"{info.ActorInfo.FormattedCoreLinkType}.Indexable"
                     )
                 ),
                 Methods = spec.Methods.AddRange(
                     new MethodSpec(
                         Name: "Specifically",
-                        ReturnType: state.ActorInfo.Actor.DisplayString,
-                        ExplicitInterfaceImplementation: $"{state.ActorInfo.FormattedCoreLinkType}.Indexable",
+                        ReturnType: info.ActorInfo.Actor.DisplayString,
+                        ExplicitInterfaceImplementation: $"{info.ActorInfo.FormattedCoreLinkType}.Indexable",
                         Parameters: new([
-                            (state.ActorInfo.Id.DisplayString, "id")
+                            (info.ActorInfo.Id.DisplayString, "id")
                         ]),
                         Expression: "Specifically(id)"
                     )
@@ -124,27 +94,27 @@ public class IndexableNode :
             };
         }
 
-        if (!state.RedefinesLinkMembers)
+        if (!redefinesLinkMembers)
             return spec;
 
         return spec with
         {
             Indexers = spec.Indexers.AddRange([
                 new IndexerSpec(
-                    Type: state.ActorInfo.Actor.DisplayString,
+                    Type: info.ActorInfo.Actor.DisplayString,
                     Modifiers: new(["new"]),
                     Parameters: new([
-                        (state.ActorInfo.Id.DisplayString, "id")
+                        (info.ActorInfo.Id.DisplayString, "id")
                     ]),
-                    Expression: $"(this as {state.ActorInfo.FormattedActorProvider}).GetActor(id)"
+                    Expression: $"(this as {info.ActorInfo.FormattedActorProvider}).GetActor(id)"
                 ),
-                ..state.AncestorOverrides.Select(x =>
+                ..info.Ancestors.Select(x =>
                     new IndexerSpec(
-                        Type: x.Actor,
+                        Type: x.ActorInfo.Actor.DisplayString,
                         Parameters: new([
-                            (state.ActorInfo.Id.DisplayString, "id")
+                            (info.ActorInfo.Id.DisplayString, "id")
                         ]),
-                        ExplicitInterfaceImplementation: x.OverrideTarget,
+                        ExplicitInterfaceImplementation: GetOverrideTarget(info, x),
                         Expression: "this[id]"
                     )
                 )
@@ -152,21 +122,21 @@ public class IndexableNode :
             Methods = spec.Methods.AddRange([
                 new MethodSpec(
                     Name: "Specifically",
-                    ReturnType: state.ActorInfo.Actor.DisplayString,
+                    ReturnType: info.ActorInfo.Actor.DisplayString,
                     Modifiers: new(["new"]),
                     Parameters: new([
-                        (state.ActorInfo.Id.DisplayString, "id")
+                        (info.ActorInfo.Id.DisplayString, "id")
                     ]),
-                    Expression: $"(this as {state.ActorInfo.FormattedActorProvider}).GetActor(id)"
+                    Expression: $"(this as {info.ActorInfo.FormattedActorProvider}).GetActor(id)"
                 ),
-                ..state.AncestorOverrides.Select(x =>
+                ..info.Ancestors.Select(x =>
                     new MethodSpec(
                         Name: "Specifically",
-                        ReturnType: x.Actor,
+                        ReturnType: x.ActorInfo.Actor.DisplayString,
                         Parameters: new([
-                            (state.ActorInfo.Id.DisplayString, "id")
+                            (info.ActorInfo.Id.DisplayString, "id")
                         ]),
-                        ExplicitInterfaceImplementation: x.OverrideTarget,
+                        ExplicitInterfaceImplementation: GetOverrideTarget(info, x),
                         Expression: "Specifically(id)"
                     )
                 )
@@ -174,7 +144,7 @@ public class IndexableNode :
         };
     }
 
-    private static ILinkImplmenter.LinkSpec CreateImplementationSpec(State state, CancellationToken token)
+    private static ILinkImplmenter.LinkSpec CreateImplementationSpec(LinkInfo info, CancellationToken token)
     {
         return ILinkImplmenter.LinkSpec.Empty;
     }

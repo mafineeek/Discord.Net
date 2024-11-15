@@ -77,7 +77,7 @@ public class ExtensionNode :
             }
         }
 
-        public Extension UpdateWithActorInfos(in Grouping<string, ActorInfo> grouping)
+        public Extension UpdateWithActorInfos(Keyed<string, ActorInfo> grouping)
         {
             var properties = Properties.ToArray();
 
@@ -88,7 +88,7 @@ public class ExtensionNode :
 
                 property = property with
                 {
-                    ActorInfo = grouping.GetValueOrDefault(property.Type, property.ActorInfo)
+                    ActorInfo = grouping.GetValueOrDefault(property.Type, null)
                 };
             }
 
@@ -147,7 +147,7 @@ public class ExtensionNode :
             .Actors
             .SelectMany(Extension.GetExtensions)
             .Combine(
-                providers.ActorInfoGrouping
+                providers.KeyedActorInfo
             )
             .Select((tuple, _) => tuple.Left.UpdateWithActorInfos(tuple.Right))
             .GroupBy(x => x.Actor);
@@ -171,9 +171,6 @@ public class ExtensionNode :
             )
             .Where(x => x.Extensions.Count > 0)
             .SelectMany(BuildExtensions);
-        
-        //_providers.AddIntrospection("ExtensionProvider", extensionProvider);
-
 
         var nestedProvider = AddNestedTypes(
             extensionProvider,

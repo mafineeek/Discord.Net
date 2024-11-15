@@ -12,7 +12,7 @@ public class LinkNode :
     Node,
     INestedTypeProducerNode
 {
-    public record State(
+    public readonly record struct State(
         ActorInfo ActorInfo,
         TypePath Path,
         LinkSchematics.Entry Entry

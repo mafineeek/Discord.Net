@@ -4,11 +4,9 @@ using Microsoft.CodeAnalysis;
 
 namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
 
-public class PagedNode :
-    Node,
-    ILinkImplmenter
+public class PagedNode : BaseLinkNode
 {
-    public readonly record struct State(
+    private readonly record struct State(
         bool PagesEntity,
         ActorInfo ActorInfo,
         string PagedType,
@@ -18,29 +16,27 @@ public class PagedNode :
     {
         public string AsyncPagedType => $"IAsyncPaged<{PagedType}>";
 
-        public static State Create(LinkNode.State link, Grouping<string, ActorInfo> ancestorGrouping)
+        public static State Create(LinkInfo linkInfo, CancellationToken token)
         {
-            var pagesEntity = link.Entry.Type.Generics.Length == 1;
+            var pagesEntity = linkInfo.State.Entry.Type.Generics.Length == 1;
 
             var pagedType = pagesEntity
-                ? link.ActorInfo.Entity.DisplayString
-                : link.Entry.Type.Generics[0];
-
-            var ancestors = ancestorGrouping.GetGroupOrEmpty(link.ActorInfo.Actor.DisplayString);
+                ? linkInfo.State.ActorInfo.Entity.DisplayString
+                : linkInfo.State.Entry.Type.Generics[0];
 
             return new State(
                 pagesEntity,
-                link.ActorInfo,
+                linkInfo.ActorInfo,
                 pagedType,
-                $"Func<{link.ActorInfo}.{link.Entry.Type.ReferenceName}, TParams?, RequestOptions?, IAsyncPaged<{pagedType}>>",
-                link.Entry.Type.ReferenceName,
+                $"Func<{linkInfo.ActorInfo}.{linkInfo.State.Entry.Type.ReferenceName}, TParams?, RequestOptions?, IAsyncPaged<{pagedType}>>",
+                linkInfo.State.Entry.Type.ReferenceName,
                 new(
-                    ancestors.Select(x =>
+                    linkInfo.Ancestors.Select(x =>
                         (
-                            $"IAsyncPaged<{(pagesEntity ? x.Entity.DisplayString : pagedType)}>",
-                            ancestorGrouping.GetGroupOrEmpty(x.Actor.DisplayString).Count > 0
-                                ? $"{x.Actor}.{link.Path.FormatRelative()}"
-                                : $"{x.FormattedLinkType}.{link.Entry.Type.ReferenceName}"
+                            $"IAsyncPaged<{(pagesEntity ? x.ActorInfo.Entity.DisplayString : pagedType)}>",
+                            x.HasAncestors
+                                ? $"{x.ActorInfo.Actor}.{linkInfo.State.Path.FormatRelative()}"
+                                : $"{x.ActorInfo.FormattedLinkType}.{linkInfo.State.Entry.Type.ReferenceName}"
                         )
                     )
                 )
@@ -48,26 +44,19 @@ public class PagedNode :
         }
     }
     
-    private readonly IncrementalValueProvider<Grouping<string, ActorInfo>> _ancestors;
-
     public PagedNode(NodeProviders providers, Logger logger) : base(providers, logger)
     {
-        _ancestors = providers.ActorAncestors;
     }
 
-    private static bool WillGenerate(LinkNode.State state)
-        => state is {IsTemplate: true, Entry.Type.Name: "Paged"};
+    protected override bool ShouldContinue(LinkNode.State linkState, CancellationToken token)
+        => linkState is {IsTemplate: true, Entry.Type.Name: "Paged"};
 
-    public IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> Branch(
-        IncrementalValuesProvider<Branch<LinkNode.State>> provider)
+    protected override IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> CreateImplementation(
+        IncrementalValuesProvider<Branch<LinkInfo>> provider)
     {
         return provider
-            .Where(WillGenerate)
-            .Combine(_ancestors)
-            .Select((tuple, _) => tuple.Left
-                .Mutate(State.Create(tuple.Left.Value, tuple.Right))
-            )
-            .Select((branch, token) => branch.Mutate(CreateImplmentation(branch.Value, token)));
+            .Select(State.Create)
+            .Select(CreateImplmentation);
     }
 
     private ILinkImplmenter.LinkImplementation CreateImplmentation(State state, CancellationToken token)

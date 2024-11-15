@@ -1,4 +1,3 @@
-using Discord.Net.Hanz.Introspection;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Tasks.Actors.V3;
 using Discord.Net.Hanz.Utils.Bakery;
@@ -64,7 +63,7 @@ public class HierarchyNode :
         ImmutableEquatableArray<string?> Overloads)
     {
         public TypePath Path { get; } = Path.Add<HierarchyNode>("Hierarchy");
-        
+
         public IEnumerable<PropertySpec> GetPropertySpecs()
         {
             var actor = ActorInfo.Actor;
@@ -101,7 +100,7 @@ public class HierarchyNode :
             var overloads = new List<string?>();
 
             var isTemplate = parameters.Path.Last?.Type == typeof(ActorNode);
-            
+
             if (isTemplate)
             {
                 bases.Add($"{parameters.Path}");
@@ -114,7 +113,6 @@ public class HierarchyNode :
                     bases.Add($"{path}.Hierarchy");
                     overloads.Add(path.ToString());
                 }
-
             }
 
             return new(
@@ -128,41 +126,39 @@ public class HierarchyNode :
         }
     }
 
-    private readonly IncrementalValueProvider<Grouping<string, HierarchyContext>> _hierarchyProvider;
+    private readonly IncrementalValueProvider<Keyed<string, HierarchyContext>> _hierarchyProvider;
 
     public HierarchyNode(NodeProviders providers, Logger logger) : base(providers, logger)
     {
         _providers = providers;
+
         _hierarchyProvider = providers
             .Actors
-            .Pair(
+            .Combine(
                 providers
                     .ActorHierarchy
-                    .GroupBy(x => x.Actor),
+                    .ToKeyed(x => x.Actor),
                 x => x.Actor.ToDisplayString(),
-                HierarchyContext.Create
+                (_, hierarchy, actor) => HierarchyContext.Create(actor, hierarchy)
             )
             .WhereNonNull()
-            .GroupBy(x => x.Actor);
+            .ToKeyed(x => x.Actor);
     }
 
     public IncrementalValuesProvider<Branch<TypeSpec>> Create<TParent>(
         IncrementalValuesProvider<Branch<(NestedTypeProducerContext Parameters, TParent Source)>>
             provider)
     {
-        var hierarchyProvider = provider
-            .Select((x, _) => x.Parameters)
-            .Pair(
-                _hierarchyProvider,
-                x => x.Value.ActorInfo.Actor.DisplayString,
-                (branch, context) => branch.Mutate(BuildContext.Create(branch.Value, context))
-            )
-            .Select(Build);
-        
-        
         return AddNestedTypes(
                 GetInstance<BackLinkNode>(),
-                hierarchyProvider,
+                provider
+                    .Select((x, _) => x.Parameters)
+                    .Combine(
+                        _hierarchyProvider,
+                        x => x.Value.ActorInfo.Actor.DisplayString,
+                        (_, context, branch) => branch.Mutate(BuildContext.Create(branch.Value, context))
+                    )
+                    .Select(Build),
                 (context, _) =>
                     new NestedTypeProducerContext(
                         context.State.ActorInfo,

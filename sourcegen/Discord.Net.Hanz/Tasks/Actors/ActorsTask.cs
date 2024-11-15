@@ -1,4 +1,3 @@
-using Discord.Net.Hanz.Introspection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -87,18 +86,6 @@ public class ActorsTask : GenerationTask
                 GetPossibleActorSymbols
             )
             .WhereNonNull();
-
-        
-        
-        // var A = context.CompilationProvider.Select((x, _) => x.Language).WithTrackingName("A");
-        // var B = context.CompilationProvider.Select((x, _) => x.Language).WithTrackingName("B");
-        // var C = A.Combine(B).WithTrackingName("C");
-        // var D = B.Combine(A).WithTrackingName("D");
-        // var E = A.Combine(D).WithTrackingName("E");
-        // var F = E.Combine(A).WithTrackingName("F");
-        // var G = F.Combine(A).WithTrackingName("G");
-
-        //NodeIntrospection.Introspect(C.Combine(D).WithTrackingName("Result"));
     }
 
     public static AssemblyTarget? GetAssemblyTarget(

@@ -4,80 +4,54 @@ using Microsoft.CodeAnalysis;
 
 namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
 
-public class DefinedNode :
-    Node,
-    ILinkImplmenter
+public class DefinedNode : BaseLinkNode
 {
-    public readonly record struct State(
-        ActorInfo Actor,
-        ImmutableEquatableArray<(string Id, string OverrideTarget)> AncestorOverrides)
-    {
-        public static State Create(
-            LinkNode.State link,
-            Grouping<string, ActorInfo> ancestors)
-        {
-            return new State(
-                link.ActorInfo,
-                ancestors
-                    .GetGroupOrEmpty(link.ActorInfo.Actor.DisplayString)
-                    .Select(x =>
-                        (
-                            x.Id.DisplayString,
-                            ancestors.GetGroupOrEmpty(x.Actor.DisplayString).Count > 0
-                                ? $"{x.Actor}.{link.Path.FormatRelative()}"
-                                : $"{x.FormattedLinkType}.Defined"
-                        )
-                    )
-                    .ToImmutableEquatableArray()
-            );
-        }
-    }
-
-    private readonly IncrementalValueProvider<Grouping<string, ActorInfo>> _ancestors;
-
     public DefinedNode(NodeProviders providers, Logger logger) : base(providers, logger)
     {
-        _ancestors = providers.ActorAncestors;
     }
 
-    public IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> Branch(
-        IncrementalValuesProvider<Branch<LinkNode.State>> provider)
-    {
-        return provider
-            .Where(x => x.Entry.Type.Name == "Defined")
-            .Combine(_ancestors)
-            .Select((tuple, _) => tuple.Left.Mutate(State.Create(tuple.Left.Value, tuple.Right)))
-            .Select(CreateImplmentation);
-    }
+    protected override bool ShouldContinue(LinkNode.State linkState, CancellationToken token)
+        => linkState.Entry.Type.Name == "Defined";
 
-    private ILinkImplmenter.LinkImplementation CreateImplmentation(State state, CancellationToken token)
+    protected override IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> CreateImplementation(
+        IncrementalValuesProvider<Branch<LinkInfo>> provider
+    ) => provider.Select(CreateImplementation);
+
+    private static string GetOverrideTarget(
+        LinkInfo info,
+        AncestorInfo ancestor
+    ) => ancestor.HasAncestors
+        ? $"{ancestor.ActorInfo.Actor}.{info.State.Path.FormatRelative()}"
+        : $"{ancestor.ActorInfo.FormattedLinkType}.Defined";
+    
+    private ILinkImplmenter.LinkImplementation CreateImplementation(LinkInfo info, CancellationToken token)
     {
         return new ILinkImplmenter.LinkImplementation(
-            CreateInterfaceSpec(state, token),
-            CreateImplementationSpec(state, token)
+            CreateInterfaceSpec(info, token),
+            CreateImplementationSpec(info, token)
         );
     }
 
-    private ILinkImplmenter.LinkSpec CreateInterfaceSpec(State state, CancellationToken token)
+    private ILinkImplmenter.LinkSpec CreateInterfaceSpec(LinkInfo info, CancellationToken token)
     {
         return new ILinkImplmenter.LinkSpec(
             Properties: new([
                 new PropertySpec(
-                    Type: $"IReadOnlyCollection<{state.Actor.Id}>",
+                    Type: $"IReadOnlyCollection<{info.State.ActorInfo.Id}>",
                     Name: "Ids",
                     Modifiers: new(["new"])
                 ),
                 new PropertySpec(
-                    Type: $"IReadOnlyCollection<{state.Actor.Id}>",
+                    Type: $"IReadOnlyCollection<{info.State.ActorInfo.Id}>",
                     Name: "Ids",
-                    ExplicitInterfaceImplementation: $"{state.Actor.FormattedLinkType}.Defined",
+                    ExplicitInterfaceImplementation: $"{info.State.ActorInfo.FormattedLinkType}.Defined",
                     Expression: "Ids"
                 ),
-                ..state.AncestorOverrides.Select(x =>
+                ..info.Ancestors.Select(x =>
                     new PropertySpec(
-                        Type: $"IReadOnlyCollection<{x.Id}>",
+                        Type: $"IReadOnlyCollection<{x.ActorInfo.Id}>",
                         Name: "Ids",
-                        ExplicitInterfaceImplementation: x.OverrideTarget,
+                        ExplicitInterfaceImplementation: GetOverrideTarget(info, x),
                         Expression: "Ids"
                     )
                 )
@@ -85,7 +59,7 @@ public class DefinedNode :
         );
     }
 
-    private ILinkImplmenter.LinkSpec CreateImplementationSpec(State state, CancellationToken token)
+    private ILinkImplmenter.LinkSpec CreateImplementationSpec(LinkInfo state, CancellationToken token)
     {
         return ILinkImplmenter.LinkSpec.Empty;
     }
