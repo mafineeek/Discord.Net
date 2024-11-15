@@ -12,6 +12,8 @@ public class ExtensionNode :
     Node,
     INestedTypeProducerNode
 {
+    private readonly NodeProviders _providers;
+
     public readonly record struct Extension(
         string Actor,
         string Name,
@@ -140,6 +142,7 @@ public class ExtensionNode :
         Logger logger
     ) : base(providers, logger)
     {
+        _providers = providers;
         _extensions = providers
             .Actors
             .SelectMany(Extension.GetExtensions)
@@ -168,6 +171,9 @@ public class ExtensionNode :
             )
             .Where(x => x.Extensions.Count > 0)
             .SelectMany(BuildExtensions);
+        
+        //_providers.AddIntrospection("ExtensionProvider", extensionProvider);
+
 
         var nestedProvider = AddNestedTypes(
             extensionProvider,

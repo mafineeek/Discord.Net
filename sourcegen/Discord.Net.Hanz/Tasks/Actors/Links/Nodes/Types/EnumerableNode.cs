@@ -1,4 +1,5 @@
 using System.Reflection.Metadata;
+using Discord.Net.Hanz.Introspection;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Tasks.Actors.V3;
 using Discord.Net.Hanz.Tasks.Traits;
@@ -165,6 +166,8 @@ public class EnumerableNode :
     public IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> Branch(
         IncrementalValuesProvider<Branch<LinkNode.State>> provider)
     {
+
+        
         return provider
             .Where(x => x.Value.Entry.Type.Name == "Enumerable")
             .Combine(_ancestors)

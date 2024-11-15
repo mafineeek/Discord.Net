@@ -19,6 +19,10 @@ public sealed class Logger : ILogger, IEquatable<Logger>, IDisposable
 
     private readonly bool _autoFlush;
 
+    private Func<string?> _prefix;
+
+    public string GetPrefix(LogLevel logLevel) => _prefix?.Invoke() ?? $"[{DateTime.Now:O} | {logLevel}]";
+
     public Logger(
         LogLevel logLevel,
         string logFilePath,
@@ -33,6 +37,50 @@ public sealed class Logger : ILogger, IEquatable<Logger>, IDisposable
         if (dir is not null && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
     }
+
+    private sealed class PrefixScope : IDisposable
+    {
+        private readonly Logger _logger;
+        private readonly Func<string?>? _oldPrefix;
+
+        public PrefixScope(Logger logger, Func<string?> prefix)
+        {
+            _logger = logger;
+            _oldPrefix = logger._prefix;
+            logger._prefix = prefix;
+        }
+
+        public void Dispose()
+        {
+            _logger._prefix = _oldPrefix;
+        }
+    }
+
+    private sealed class FlushScope : IDisposable
+    {
+        private readonly Logger _logger;
+
+        public FlushScope(Logger logger)
+        {
+            _logger = logger;
+        }
+
+        public void Dispose()
+        {
+            _logger.Flush();
+        }
+    }
+
+    private FlushScope? _flushScope;
+
+    public IDisposable GetFlushScope()
+        => _flushScope ??= new(this);
+
+    public IDisposable WithPrefix(string prefix)
+        => new PrefixScope(this, () => prefix);
+
+    public IDisposable WithPrefix(Func<string?> prefix)
+        => new PrefixScope(this, prefix);
 
     public Logger GetSubLogger(string name)
         => _subLoggers.GetOrAdd(
@@ -70,7 +118,7 @@ public sealed class Logger : ILogger, IEquatable<Logger>, IDisposable
 
     public Logger WithSemanticContext(SemanticModel model)
         => WithCompilationContext(model.Compilation);
-    
+
     public Logger WithCompilationContext(Compilation compilation)
     {
         if (_logFilePath.Contains(compilation.Assembly.Name))
@@ -127,7 +175,7 @@ public sealed class Logger : ILogger, IEquatable<Logger>, IDisposable
         {
             lock (_syncRoot)
             {
-                _logs.AddLast($"[{DateTime.Now:O} | {logLevel}] {message}");
+                _logs.AddLast($"{GetPrefix(logLevel)} {message}");
 
                 if (_autoFlush && _logs.Count >= MAX_UNFLUSHED_LOGS)
                     NoLockFlush();

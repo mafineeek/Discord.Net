@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Discord.Net.Hanz.Introspection;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
 using Discord.Net.Hanz.Utils.Bakery;
@@ -141,8 +142,20 @@ public class ActorNode : Node
                 )
             )
             .Select(CreatePartialContainer);
-        
-        providers.AddIntrospection("ActorBuildProvider", buildProvider);
+
+        // NodeIntrospection.Introspect(
+        //     providers.ActorHierarchy.Combine(
+        //         buildProvider
+        //             .Combine(providers.ActorInfoGrouping)
+        //             .Combine(providers.Actors.Collect())
+        //             .Combine(providers.Schematics.Select((x, _) => x.Root).Collect())
+        //             .Collect()
+        //     )
+        // );
+
+        // NodeIntrospection.Introspect(
+        //     providers.ActorHierarchy.Combine(buildProvider.Combine(providers.ActorAncestors).Combine(providers.ActorInfoGrouping).Collect())
+        //     );
 
         buildProvider = AddNestedTypes(
             buildProvider,
@@ -153,12 +166,14 @@ public class ActorNode : Node
             GetInstance<LinkNode>()
         );
 
+        //NodeIntrospection.Introspect(buildProvider);
+
         var result = buildProvider
             .Collect()
             .SelectMany(Introspect)
             .Select(CreateLinkInterface)
             .Select(CreateRelationshipsTypes);
-        
+
         providers.AddSourceOutput(result, BuildSource);
     }
 

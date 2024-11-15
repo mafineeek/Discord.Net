@@ -1,3 +1,4 @@
+using Discord.Net.Hanz.Introspection;
 using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Tasks.Actors.V3;
 using Discord.Net.Hanz.Utils.Bakery;
@@ -9,6 +10,8 @@ public class HierarchyNode :
     Node,
     INestedTypeProducerNode
 {
+    private readonly NodeProviders _providers;
+
     public readonly record struct HierarchyContext(
         string Actor,
         ImmutableEquatableArray<ActorInfo> Hierarchy
@@ -129,6 +132,7 @@ public class HierarchyNode :
 
     public HierarchyNode(NodeProviders providers, Logger logger) : base(providers, logger)
     {
+        _providers = providers;
         _hierarchyProvider = providers
             .Actors
             .Pair(
@@ -154,6 +158,7 @@ public class HierarchyNode :
                 (branch, context) => branch.Mutate(BuildContext.Create(branch.Value, context))
             )
             .Select(Build);
+        
         
         return AddNestedTypes(
                 GetInstance<BackLinkNode>(),

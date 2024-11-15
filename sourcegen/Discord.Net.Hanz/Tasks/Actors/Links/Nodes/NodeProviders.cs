@@ -110,16 +110,9 @@ public readonly struct NodeProviders
         _context.RegisterPostInitializationOutput(
             (context) =>
             {
-                var smart = Introspection.NodeIntrospection.IntrospectSmart(provider);
-                var reverse = NodeIntrospection.Introspect(provider);
                 context.AddSource(
-                    $"Introspection/Smart{name}",
-                    smart
-                );
-                
-                context.AddSource(
-                    $"Introspection/Reverse{name}",
-                    reverse
+                    $"Introspection/{name}",
+                    NodeIntrospection.Introspect(provider)
                 );
             }
         );
@@ -130,16 +123,9 @@ public readonly struct NodeProviders
         _context.RegisterPostInitializationOutput(
             (context) =>
             {
-                var smart = Introspection.NodeIntrospection.IntrospectSmart(provider);
-                var reverse = NodeIntrospection.Introspect(provider);
                 context.AddSource(
-                    $"Introspection/Smart{name}",
-                    smart
-                );
-                
-                context.AddSource(
-                    $"Introspection/Reverse{name}",
-                    reverse
+                    $"Introspection/{name}",
+                    NodeIntrospection.Introspect(provider)
                 );
             }
         );

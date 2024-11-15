@@ -14,4 +14,12 @@ public static class StringUtils
 
         return $"{Environment.NewLine}{str}";
     }
+
+    public static string CenterAlign(this string str, int width)
+    {
+        if (str.Length >= width) return str;
+
+        return str.Prefix((width / 2) - (str.Length / 2)).PadRight(width);
+
+    }
 }
