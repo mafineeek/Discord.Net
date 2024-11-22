@@ -14,7 +14,7 @@ namespace Discord;
         nameof(IGuildActor)
     ),
     LinkHierarchicalRoot,
-    SuppressMessage("ReSharper", "PossibleInterfaceMemberAmbiguity")
+    FetchableOfMany(nameof(Routes.GetGuildChannels))
 ]
 public partial interface IGuildChannelActor :
     IGuildActor.CanonicalRelationship,

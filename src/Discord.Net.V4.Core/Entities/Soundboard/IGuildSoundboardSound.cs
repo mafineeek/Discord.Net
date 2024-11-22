@@ -3,8 +3,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[FetchableOfMany(nameof(Routes.ListGuildSoundboardSounds))]
-[Fetchable(nameof(Routes.GetGuildSoundboardSound))]
 public partial interface IGuildSoundboardSound :
     ISoundboardSound,
     ISnowflakeEntity<IGuildSoundboardSoundModel>,

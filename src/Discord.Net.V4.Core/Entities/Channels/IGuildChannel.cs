@@ -4,7 +4,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[FetchableOfMany(nameof(Routes.GetGuildChannels))]
 public partial interface IGuildChannel :
     ISnowflakeEntity<IGuildChannelModel>,
     IChannel,

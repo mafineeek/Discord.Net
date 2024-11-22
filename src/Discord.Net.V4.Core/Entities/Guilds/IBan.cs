@@ -6,8 +6,6 @@ namespace Discord;
 /// <summary>
 ///     Represents a generic ban object.
 /// </summary>
-[Refreshable(nameof(Routes.GetGuildBan))]
-[PagedFetchableOfMany<PageGuildBansParams>(nameof(Routes.GetGuildBans))]
 public partial interface IBan :
     ISnowflakeEntity<IBanModel>,
     IBanActor

@@ -3,9 +3,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[
-    FetchableOfMany(nameof(Routes.ListSKUs))
-]
 public partial interface ISku :
     ISnowflakeEntity<ISkuModel>,
     ISkuActor

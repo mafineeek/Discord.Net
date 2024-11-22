@@ -3,7 +3,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[FetchableOfMany(nameof(Routes.ListDefaultSoundboardSounds))]
 public partial interface ISoundboardSound : 
     ISnowflakeEntity<ISoundboardSoundModel>,
     ISoundboardSoundActor

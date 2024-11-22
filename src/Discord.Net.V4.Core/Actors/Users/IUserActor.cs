@@ -4,8 +4,11 @@ using Discord.Rest;
 
 namespace Discord;
 
-[Loadable(nameof(Routes.GetUser))]
-[BackLinkable]
+[
+    Loadable(nameof(Routes.GetUser)), 
+    BackLinkable, 
+    Refreshable(nameof(Routes.GetUser))
+]
 public partial interface IUserActor :
     IActor<ulong, IUser>
 {

@@ -13,14 +13,6 @@ public sealed partial class FetchableTraitNode
     {
         context.RegisterSourceOutput(
             FetchableProvider
-                .MapValues((info, details) =>
-                {
-                    using var logger = Logger.GetSubLogger("State2");
-                    
-                    logger.Log($"{details.Kind}: {details.Route}");
-                
-                    return details;
-                })
                 .MapValuesVia(
                     PathingInfoProvider,
                     GenerationState (info, details, pathing) => (details, pathing)
@@ -34,7 +26,7 @@ public sealed partial class FetchableTraitNode
     private SourceSpec ToSourceSpec(ActorInfo info, StatefulGeneration<GenerationState> generation)
     {
         return new(
-            $"{generation.State.Details.Kind}/{info.Actor.MetadataName}",
+            $"{generation.State.Details.Kind}/{info.Actor.MetadataName}_{generation.State.Details.Route.Name}",
             "Discord",
             new(["Discord", "Discord.Rest"]),
             new([generation.Spec])

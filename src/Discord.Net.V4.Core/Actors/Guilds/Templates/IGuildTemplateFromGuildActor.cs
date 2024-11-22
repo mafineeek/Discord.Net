@@ -4,7 +4,9 @@ namespace Discord;
 
 [
     Modifiable<ModifyGuildTemplateProperties>(nameof(Routes.ModifyGuildTemplate)),
-    Deletable(nameof(Routes.DeleteGuildTemplate))
+    Deletable(nameof(Routes.DeleteGuildTemplate)), 
+    Refreshable(nameof(Routes.GetGuildTemplate)),
+    FetchableOfMany(nameof(Routes.GetGuildTemplates))
 ]
 public partial interface IGuildTemplateFromGuildActor :
     IGuildTemplateActor,

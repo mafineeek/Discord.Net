@@ -8,7 +8,9 @@ namespace Discord;
 [
     Loadable(nameof(Routes.GetGuildMember)),
     Modifiable<ModifyGuildUserProperties>(nameof(Routes.ModifyGuildMember)),
-    SuppressMessage("ReSharper", "PossibleInterfaceMemberAmbiguity")
+    SuppressMessage("ReSharper", "PossibleInterfaceMemberAmbiguity"),
+    PagedFetchableOfMany<PageGuildMembersParams>(nameof(Routes.ListGuildMembers)),
+    Refreshable(nameof(Routes.GetGuildMember))
 ]
 public partial interface IMemberActor :
     IUserActor,

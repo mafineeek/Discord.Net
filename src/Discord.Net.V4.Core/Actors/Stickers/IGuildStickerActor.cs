@@ -11,7 +11,8 @@ namespace Discord;
         nameof(Routes.CreateGuildSticker),
         nameof(IGuildActor.Stickers)
     ),
-    SuppressMessage("ReSharper", "PossibleInterfaceMemberAmbiguity")
+    FetchableOfMany(nameof(Routes.ListGuildStickers)),
+    Refreshable(nameof(Routes.GetGuildSticker))
 ]
 public partial interface IGuildStickerActor :
     IGuildActor.CanonicalRelationship,

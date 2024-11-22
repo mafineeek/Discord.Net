@@ -4,7 +4,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[FetchableOfMany(nameof(Routes.GetGuildRoles))]
 public partial interface IRole :
     ISnowflakeEntity<IRoleModel>,
     IMentionable,

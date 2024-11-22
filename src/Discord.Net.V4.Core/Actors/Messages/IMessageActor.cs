@@ -11,7 +11,9 @@ namespace Discord;
         nameof(Routes.CreateMessage),
         nameof(IMessageChannelTrait)
     ),
-    Modifiable<ModifyMessageProperties>(nameof(Routes.ModifyMessage))
+    Modifiable<ModifyMessageProperties>(nameof(Routes.ModifyMessage)),
+    PagedFetchableOfMany<PageChannelMessagesParams>(nameof(Routes.GetChannelMessages)),
+    Refreshable(nameof(Routes.GetChannelMessage))
 ]
 public partial interface IMessageActor :
     IMessageChannelTrait.CanonicalRelationship,

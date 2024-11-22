@@ -9,7 +9,10 @@ namespace Discord;
     Loadable(nameof(Routes.GetChannel), typeof(ThreadChannelBase)),
     Modifiable<ModifyThreadChannelProperties>(nameof(Routes.ModifyChannel)),
     RelationshipName("Thread"),
-    SuppressMessage("ReSharper", "PossibleInterfaceMemberAmbiguity")
+    SuppressMessage("ReSharper", "PossibleInterfaceMemberAmbiguity"),
+    PagedFetchableOfMany<PagePublicArchivedThreadsParams>(nameof(Routes.ListPublicArchivedThreads)),
+    PagedFetchableOfMany<PagePrivateArchivedThreadsParams>(nameof(Routes.ListPrivateArchivedThreads)),
+    PagedFetchableOfMany<PageJoinedPrivateArchivedThreadsParams>(nameof(Routes.ListJoinedPrivateArchivedThreads))
 ]
 public partial interface IThreadChannelActor :
     IMessageChannelTrait,

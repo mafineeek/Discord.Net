@@ -5,8 +5,10 @@ using Discord.Rest;
 namespace Discord;
 
 [
-    Loadable(nameof(Routes.GetGuildBan)), 
-    Deletable(nameof(Routes.RemoveGuildBan))
+    Loadable(nameof(Routes.GetGuildBan)),
+    Deletable(nameof(Routes.RemoveGuildBan)), 
+    Refreshable(nameof(Routes.GetGuildBan)),
+    PagedFetchableOfMany<PageGuildBansParams>(nameof(Routes.GetGuildBans))
 ]
 public partial interface IBanActor :
     IGuildActor.CanonicalRelationship,

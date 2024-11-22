@@ -4,9 +4,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[FetchableOfMany(nameof(Routes.GetGuildWebhooks))]
-[FetchableOfMany(nameof(Routes.GetChannelWebhooks))]
-[Refreshable(nameof(Routes.GetWebhook))]
 public partial interface IWebhook :
     ISnowflakeEntity<IWebhookModel>,
     IWebhookActor

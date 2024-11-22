@@ -7,13 +7,6 @@ namespace Discord;
 /// <summary>
 ///     Represents a custom sticker within a guild.
 /// </summary>
-[FetchableOfMany(nameof(Routes.ListGuildStickers))]
-[Refreshable(nameof(Routes.GetGuildSticker))]
-[SuppressMessage(
-    "ReSharper",
-    "PossibleInterfaceMemberAmbiguity",
-    Justification = "Source generator overloads the ambiguous APIs"
-)]
 public partial interface IGuildSticker :
     ISnowflakeEntity<IGuildStickerModel>,
     ISticker,

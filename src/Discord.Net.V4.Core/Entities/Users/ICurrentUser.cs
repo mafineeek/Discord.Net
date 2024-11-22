@@ -8,12 +8,6 @@ namespace Discord;
 /// <summary>
 ///     Represents the logged-in Discord user.
 /// </summary>
-[Refreshable(nameof(Routes.GetCurrentUser))]
-[SuppressMessage(
-    "ReSharper",
-    "PossibleInterfaceMemberAmbiguity",
-    Justification = "Source generator overloads the ambiguous APIs"
-)]
 public partial interface ICurrentUser :
     ISnowflakeEntity<ISelfUserModel>,
     IUser,

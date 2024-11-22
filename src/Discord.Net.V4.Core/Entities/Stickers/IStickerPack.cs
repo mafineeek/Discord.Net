@@ -3,11 +3,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[
-    FetchableOfMany(nameof(Routes.ListStickerPacks)),
-    Refreshable(nameof(Routes.GetStickerPack)),
-    Fetchable(nameof(Routes.GetStickerPack))
-]
 public partial interface IStickerPack :
     IStickerPackActor,
     ISnowflakeEntity<IStickerPackModel>

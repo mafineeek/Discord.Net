@@ -3,7 +3,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[FetchableOfMany(nameof(Routes.GetGuildIntegrations))]
 public partial interface IIntegration :
     ISnowflakeEntity<IIntegrationModel>,
     IIntegrationActor

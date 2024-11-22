@@ -6,10 +6,12 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Discord;
 
-[Loadable(nameof(Routes.GetCurrentUser))]
-[Modifiable<ModifySelfUserProperties>(nameof(Routes.ModifyCurrentUser))]
-[BackLinkable]
-[SuppressMessage("ReSharper", "PossibleInterfaceMemberAmbiguity")]
+[
+    Loadable(nameof(Routes.GetCurrentUser)),
+    Modifiable<ModifySelfUserProperties>(nameof(Routes.ModifyCurrentUser)),
+    BackLinkable, 
+    Refreshable(nameof(Routes.GetCurrentUser))
+]
 public partial interface ICurrentUserActor :
     IUserActor,
     IActor<ulong, ICurrentUser>

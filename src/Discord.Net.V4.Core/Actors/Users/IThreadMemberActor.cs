@@ -2,8 +2,13 @@ using Discord.Rest;
 
 namespace Discord;
 
-[Loadable(nameof(Routes.GetThreadMember))]
-[Deletable(nameof(Routes.RemoveThreadMember))]
+[
+    Loadable(nameof(Routes.GetThreadMember)),
+    Deletable(nameof(Routes.RemoveThreadMember)),
+    FetchableOfMany(nameof(Routes.ListThreadMembers)),
+    PagedFetchableOfMany<PageThreadMembersParams>(nameof(Routes.ListThreadMembersPaged)),
+    Refreshable(nameof(Routes.GetThreadMember))
+]
 public partial interface IThreadMemberActor :
     IActor<ulong, IThreadMember>,
     IThreadChannelActor.CanonicalRelationship,
@@ -20,7 +25,7 @@ public partial interface IThreadMemberActor :
     {
         IThreadMemberActor.Paged<PageThreadMembersParams>.Indexable AsPaged { get; }
     }
-    
+
     [BackLink<IThreadChannelActor>]
     private static Task AddAsync(
         IThreadChannelActor thread,
@@ -34,7 +39,7 @@ public partial interface IThreadMemberActor :
             token
         );
     }
-    
+
     [BackLink<IThreadChannelActor>]
     private static Task RemoveAsync(
         IThreadChannelActor thread,

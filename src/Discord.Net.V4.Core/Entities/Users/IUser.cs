@@ -3,7 +3,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[Refreshable(nameof(Routes.GetUser))]
 public partial interface IUser :
     ISnowflakeEntity<IUserModel>,
     IMentionable,

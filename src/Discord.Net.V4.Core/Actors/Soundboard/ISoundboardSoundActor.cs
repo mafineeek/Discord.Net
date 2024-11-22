@@ -2,6 +2,7 @@ using Discord.Rest;
 
 namespace Discord;
 
+[FetchableOfMany(nameof(Routes.ListDefaultSoundboardSounds))]
 public partial interface ISoundboardSoundActor :
     IActor<ulong, ISoundboardSound>
 {

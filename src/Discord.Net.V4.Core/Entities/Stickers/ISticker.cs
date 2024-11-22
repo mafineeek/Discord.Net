@@ -6,7 +6,6 @@ namespace Discord;
 /// <summary>
 ///     Represents a discord sticker.
 /// </summary>
-[Refreshable(nameof(Routes.GetSticker))]
 public partial interface ISticker :
     ISnowflakeEntity<IStickerModel>,
     IStickerActor

@@ -7,7 +7,6 @@ namespace Discord;
 /// <summary>
 ///     Represents a live stage instance within a stage channel.
 /// </summary>
-[Refreshable(nameof(Routes.GetStageInstance))]
 public partial interface IStageInstance :
     ISnowflakeEntity<IStageInstanceModel>,
     IStageInstanceActor

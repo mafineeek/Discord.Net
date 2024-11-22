@@ -7,8 +7,6 @@ namespace Discord;
 /// <summary>
 ///     An image-based emote that is attached to a guild.
 /// </summary>
-[Refreshable(nameof(Routes.GetGuildEmoji))]
-[FetchableOfMany(nameof(Routes.ListGuildEmojis))]
 public partial interface IGuildEmote :
     ICustomEmote,
     IGuildEmoteActor

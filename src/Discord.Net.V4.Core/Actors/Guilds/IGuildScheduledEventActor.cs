@@ -11,7 +11,9 @@ namespace Discord;
         nameof(Routes.CreateGuildScheduledEvent),
         nameof(IGuildActor.ScheduledEvents)
     ),
-    Modifiable<ModifyGuildScheduledEventProperties>(nameof(Routes.ModifyGuildScheduledEvent))
+    Modifiable<ModifyGuildScheduledEventProperties>(nameof(Routes.ModifyGuildScheduledEvent)),
+    FetchableOfMany(nameof(Routes.ListGuildScheduledEvents)), 
+    Refreshable(nameof(Routes.GetGuildScheduledEvent))
 ]
 public partial interface IGuildScheduledEventActor :
     IGuildActor.CanonicalRelationship,

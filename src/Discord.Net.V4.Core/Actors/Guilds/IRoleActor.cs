@@ -4,17 +4,20 @@ using Discord.Rest;
 
 namespace Discord;
 
-[Loadable(nameof(Routes.GetGuildRole))]
-[Deletable(nameof(Routes.DeleteGuildRole))]
-[Creatable<CreateRoleProperties>(nameof(Routes.CreateGuildRole))]
-[Modifiable<ModifyRoleProperties>(nameof(Routes.ModifyGuildRole))]
+[
+    Loadable(nameof(Routes.GetGuildRole)),
+    Deletable(nameof(Routes.DeleteGuildRole)),
+    Creatable<CreateRoleProperties>(nameof(Routes.CreateGuildRole)),
+    Modifiable<ModifyRoleProperties>(nameof(Routes.ModifyGuildRole)),
+    FetchableOfMany(nameof(Routes.GetGuildRoles))
+]
 public partial interface IRoleActor :
     IGuildActor.CanonicalRelationship,
     IActor<ulong, IRole>
 {
     [BackLink<IMemberActor>]
     private static async Task AddAsync(
-        IMemberActor member, 
+        IMemberActor member,
         EntityOrId<ulong, IRoleActor> role,
         RequestOptions? options = null,
         CancellationToken token = default)
@@ -25,10 +28,10 @@ public partial interface IRoleActor :
             token
         );
     }
-    
+
     [BackLink<IMemberActor>]
     private static async Task RemoveAsync(
-        IMemberActor member, 
+        IMemberActor member,
         EntityOrId<ulong, IRoleActor> role,
         RequestOptions? options = null,
         CancellationToken token = default)

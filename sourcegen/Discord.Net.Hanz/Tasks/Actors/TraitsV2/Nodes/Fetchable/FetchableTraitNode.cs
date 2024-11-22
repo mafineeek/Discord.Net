@@ -102,14 +102,6 @@ public sealed partial class FetchableTraitNode : TraitNode
                         )
                     )
             )
-            .MapValues((actor, detail) =>
-            {
-                using var logger = Logger.GetSubLogger("State");
-
-                logger.Log($"{actor}: {detail.Kind} - {detail.Route.Name} | {GetTask<ActorsTask>().ActorInfos.ContainsKey(actor)}");
-
-                return detail;
-            })
             .TransformKeysVia(GetTask<ActorsTask>().ActorInfos);
             
 

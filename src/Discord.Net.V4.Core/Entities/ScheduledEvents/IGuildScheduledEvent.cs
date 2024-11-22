@@ -4,8 +4,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[FetchableOfMany(nameof(Routes.ListGuildScheduledEvents))]
-[Refreshable(nameof(Routes.GetGuildScheduledEvent))]
 public partial interface IGuildScheduledEvent :
     ISnowflakeEntity<IGuildScheduledEventModel>,
     IGuildScheduledEventActor

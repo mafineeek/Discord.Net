@@ -3,7 +3,6 @@ using Discord.Rest;
 
 namespace Discord;
 
-[Refreshable(nameof(Routes.GetInvite))]
 public partial interface IInvite :
     IInviteActor,
     IEntity<string, IInviteModel>
