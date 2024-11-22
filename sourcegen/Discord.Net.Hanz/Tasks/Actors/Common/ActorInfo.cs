@@ -1,7 +1,7 @@
-using Discord.Net.Hanz.Tasks.Actors.V3;
+using Discord.Net.Hanz.Tasks.Actors.Links;
 using Discord.Net.Hanz.Utils.Bakery;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
+namespace Discord.Net.Hanz.Tasks.Actors;
 
 public interface IHasActorInfo
 {
@@ -37,6 +37,9 @@ public readonly record struct ActorInfo(
     public string FormattedBackLinkType
         => $"Discord.IBackLink<TSource, {Actor}, {Id}, {Entity}, {Model}>";
 
+    public string FormattedBackLinkOfType(TypeRef type)
+        => $"Discord.IBackLink<{type}, {Actor}, {Id}, {Entity}, {Model}>";
+    
     public string FormattedCoreBackLinkType
         =>
             $"Discord.IBackLink<TSource, {CoreActor}, {Id}, {CoreEntity}, {Model}>";
@@ -71,7 +74,7 @@ public readonly record struct ActorInfo(
     public string FormattedCoreEntityProvider
         => $"Discord.IEntityProvider<{CoreEntity}, {Model}>";
 
-    public static ActorInfo Create(LinksV5.NodeContext context)
+    public static ActorInfo Create(LinksTask.NodeContext context)
         => Create(context.Target);
     
     public static ActorInfo Create(ActorsTask.ActorSymbols target)

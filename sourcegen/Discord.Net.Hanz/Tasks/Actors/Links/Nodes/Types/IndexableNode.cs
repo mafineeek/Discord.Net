@@ -1,17 +1,15 @@
-using System.Collections.Immutable;
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
+namespace Discord.Net.Hanz.Tasks.Actors.Links.Nodes.Types;
 
-public class IndexableNode : BaseLinkNode
+public class IndexableNode : BaseLinkTypeNode
 {
-    public IndexableNode(NodeProviders providers, Logger logger) : base(providers, logger)
+    public IndexableNode(IncrementalGeneratorInitializationContext context, Logger logger) : base(context, logger)
     {
     }
 
-    protected override bool ShouldContinue(LinkNode.State linkState, CancellationToken token)
+    protected override bool ShouldContinue(LinkTypeNode.State linkState, CancellationToken token)
         => linkState.Entry.Type.Name == "Indexable" && linkState.IsTemplate;
 
     protected override IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> CreateImplementation(

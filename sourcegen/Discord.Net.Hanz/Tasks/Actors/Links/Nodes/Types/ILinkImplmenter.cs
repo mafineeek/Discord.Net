@@ -1,11 +1,10 @@
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
+using Discord.Net.Hanz.Nodes;
 using Discord.Net.Hanz.Utils.Bakery;
-using Microsoft.CodeAnalysis;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
+namespace Discord.Net.Hanz.Tasks.Actors.Links.Nodes.Types;
 
 public interface ILinkImplmenter :
-    IBranchNode<LinkNode.State, ILinkImplmenter.LinkImplementation>
+    IBranchNode<LinkTypeNode.State, ILinkImplmenter.LinkImplementation>
 {
     // IncrementalValuesProvider<Branch<LinkImplementation, LinkNode.State>> Implement(
     //     IncrementalValuesProvider<Branch<LinkNode.State, LinkNode.State>> provider

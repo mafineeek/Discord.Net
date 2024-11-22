@@ -16,7 +16,7 @@ public sealed class TypeRef(ITypeSymbol type) : IEquatable<TypeRef>
     );
     
     public string Name { get; } = type.Name;
-    public string Namespace { get; } = type.ContainingNamespace.ToString();
+    public string? Namespace { get; } = type.ContainingNamespace?.ToString();
 
     public string DisplayString { get; } = type.ToDisplayString();
     public string MetadataName { get; } = type.ToFullMetadataName();

@@ -1,59 +1,14 @@
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
-using Discord.Net.Hanz.Tasks.Actors.V3;
+using Discord.Net.Hanz.Tasks.Actors.Nodes;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes;
+namespace Discord.Net.Hanz.Tasks.Actors.Links.Nodes.Modifiers;
 
 public class HierarchyNode :
-    Node,
+    LinkNode,
     INestedTypeProducerNode
 {
-    private readonly NodeProviders _providers;
-
-    public readonly record struct HierarchyContext(
-        string Actor,
-        ImmutableEquatableArray<ActorInfo> Hierarchy
-    )
-    {
-        public static HierarchyContext? Create(
-            ActorsTask.ActorSymbols context,
-            NodeProviders.Hierarchy hierarchyInfo)
-        {
-            var attribute = context.GetCoreActor()
-                .GetAttributes()
-                .FirstOrDefault(x => x.AttributeClass?.Name == "LinkHierarchicalRootAttribute");
-
-            if (attribute is null) return null;
-
-            var types = attribute.NamedArguments
-                .FirstOrDefault(x => x.Key == "Types")
-                .Value;
-
-            var hierarchy = types.Kind is not TypedConstantKind.Error
-                ? types.Kind switch
-                {
-                    TypedConstantKind.Array => types
-                        .Values
-                        .Select(x =>
-                            hierarchyInfo.Children.FirstOrDefault(y =>
-                                y.Actor.DisplayString == ((INamedTypeSymbol) x.Value!).ToDisplayString())
-                        )
-                        .Where(x => x != default)
-                        .ToImmutableEquatableArray(),
-                    _ => []
-                }
-                : hierarchyInfo.Children.Where(x => x.Actor.Generics.Length == 0).ToImmutableEquatableArray();
-
-            if (hierarchy.Count == 0) return null;
-
-            return new HierarchyContext(
-                context.Actor.ToDisplayString(),
-                hierarchy
-            );
-        }
-    }
-
     public readonly record struct BuildContext(
         ActorInfo ActorInfo,
         TypePath Path,
@@ -94,7 +49,8 @@ public class HierarchyNode :
             ]);
         }
 
-        public static BuildContext Create(NestedTypeProducerContext parameters, HierarchyContext context)
+        public static BuildContext Create(NestedTypeProducerContext parameters,
+            ImmutableEquatableArray<ActorInfo> hierarchy)
         {
             var bases = new List<string>();
             var overloads = new List<string?>();
@@ -119,59 +75,86 @@ public class HierarchyNode :
                 parameters.ActorInfo,
                 parameters.Path,
                 isTemplate,
-                context.Hierarchy,
+                hierarchy,
                 bases.ToImmutableEquatableArray(),
                 overloads.ToImmutableEquatableArray()
             );
         }
     }
 
-    private readonly IncrementalValueProvider<Keyed<string, HierarchyContext>> _hierarchyProvider;
+    private readonly IncrementalKeyValueProvider<ActorInfo, ImmutableEquatableArray<ActorInfo>> _hierarchyProvider;
 
-    public HierarchyNode(NodeProviders providers, Logger logger) : base(providers, logger)
+    public HierarchyNode(IncrementalGeneratorInitializationContext context, Logger logger) : base(context, logger)
     {
-        _providers = providers;
+        _hierarchyProvider = GetTask<ActorsTask>()
+            .ActorHierarchies
+            .JoinByKey(
+                context
+                    .SyntaxProvider
+                    .ForAttributeWithMetadataName(
+                        "Discord.LinkHierarchicalRootAttribute",
+                        (node, _) => node is InterfaceDeclarationSyntax,
+                        (string Actor, ImmutableEquatableArray<string> UserSpecifiedTypes)? (sourceContext, _) =>
+                        {
+                            if (sourceContext.SemanticModel.GetDeclaredSymbol(sourceContext.TargetNode) is not
+                                INamedTypeSymbol
+                                symbol)
+                                return null;
 
-        _hierarchyProvider = providers
-            .Actors
-            .Combine(
-                providers
-                    .ActorHierarchy
-                    .ToKeyed(x => x.Actor),
-                x => x.Actor.ToDisplayString(),
-                (_, hierarchy, actor) => HierarchyContext.Create(actor, hierarchy)
-            )
-            .WhereNonNull()
-            .ToKeyed(x => x.Actor);
+                            if (sourceContext.Attributes.Length != 1)
+                                return null;
+
+                            var value = sourceContext
+                                .Attributes[0]
+                                .NamedArguments
+                                .FirstOrDefault(x => x.Key == "Types")
+                                .Value;
+
+                            if (value.Kind is TypedConstantKind.Error)
+                                return null;
+
+                            return (
+                                symbol.ToDisplayString(),
+                                value.Values
+                                    .Select(x => ((INamedTypeSymbol) x.Value!).ToDisplayString())
+                                    .ToImmutableEquatableArray()
+                            );
+                        }
+                    )
+                    .WhereNonNull()
+                    .KeyedBy(x => x.Actor, x => x.UserSpecifiedTypes)
+                    .TransformKeyVia(GetTask<ActorsTask>().ActorInfos),
+                (info, hierarchy, userSpecifiedTypes) => userSpecifiedTypes.Count > 0
+                    ? userSpecifiedTypes
+                        .Select(x => GetTask<ActorsTask>().ActorInfos.GetValueOrDefault(x))
+                        .Where(x => x != default)
+                        .ToImmutableEquatableArray()
+                    : hierarchy.Children
+            );
     }
 
     public IncrementalValuesProvider<Branch<TypeSpec>> Create<TParent>(
-        IncrementalValuesProvider<Branch<(NestedTypeProducerContext Parameters, TParent Source)>>
-            provider)
+        IncrementalValuesProvider<Branch<(NestedTypeProducerContext Parameters, TParent Source)>> provider
+    )
     {
         return AddNestedTypes(
-                GetInstance<BackLinkNode>(),
-                provider
-                    .Select((x, _) => x.Parameters)
-                    .Combine(
-                        _hierarchyProvider,
-                        x => x.Value.ActorInfo.Actor.DisplayString,
-                        (_, context, branch) => branch.Mutate(BuildContext.Create(branch.Value, context))
-                    )
-                    .Select(Build),
-                (context, _) =>
-                    new NestedTypeProducerContext(
-                        context.State.ActorInfo,
-                        context.State.Path
-                    ),
-                (context, specs, _) =>
-                    context with
-                    {
-                        Spec = context.Spec.AddNestedTypes(specs)
-                    },
-                context => context.State
-            )
-            .Select((x, _) => x.Spec);
+            GetNode<BackLinkNode>(),
+            _hierarchyProvider
+                .JoinByKey(
+                    provider.KeyedBy(x => x.Value.Parameters.ActorInfo),
+                    (info, hierarchy, branch) => branch
+                        .Mutate(BuildContext.Create(branch.Value.Parameters, hierarchy))
+                )
+                .ValuesProvider
+                .Select(Build),
+            (context, _) =>
+                new NestedTypeProducerContext(
+                    context.State.ActorInfo,
+                    context.State.Path
+                ),
+            (context, specs, _) => context.Spec.AddNestedTypes(specs),
+            context => context.State
+        );
     }
 
     private StatefulGeneration<BuildContext> Build(BuildContext context, CancellationToken token)

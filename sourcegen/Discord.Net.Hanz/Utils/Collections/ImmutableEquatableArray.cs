@@ -12,7 +12,7 @@ public sealed class ImmutableEquatableArray<T> :
 
     private readonly T[] _values;
     public T this[int index] => _values[index];
-    public int Count => _values.Length;
+    public int Count => _values?.Length ?? 0;
 
     public ImmutableEquatableArray()
     {

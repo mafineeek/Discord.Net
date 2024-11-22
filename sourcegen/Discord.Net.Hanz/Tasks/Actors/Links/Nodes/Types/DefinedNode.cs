@@ -1,16 +1,15 @@
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
+namespace Discord.Net.Hanz.Tasks.Actors.Links.Nodes.Types;
 
-public class DefinedNode : BaseLinkNode
+public class DefinedNode : BaseLinkTypeNode
 {
-    public DefinedNode(NodeProviders providers, Logger logger) : base(providers, logger)
+    public DefinedNode(IncrementalGeneratorInitializationContext context, Logger logger) : base(context, logger)
     {
     }
 
-    protected override bool ShouldContinue(LinkNode.State linkState, CancellationToken token)
+    protected override bool ShouldContinue(LinkTypeNode.State linkState, CancellationToken token)
         => linkState.Entry.Type.Name == "Defined";
 
     protected override IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> CreateImplementation(

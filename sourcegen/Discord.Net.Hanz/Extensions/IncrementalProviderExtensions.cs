@@ -53,4 +53,64 @@ public static class IncrementalProviderExtensions
     {
         return source.Collect().Select((x, _) => x.FirstOrDefault(predicate));
     }
+
+    public static void RegisterSourceOutput(
+        this IncrementalGeneratorInitializationContext context,
+        IncrementalValuesProvider<SourceSpec> provider
+    )
+    {
+        context.RegisterSourceOutput(
+            provider,
+            (context, spec) => context.AddSource(spec.Path, spec.ToString())
+        );
+    }
+
+    public static void RegisterSourceOutput(
+        this IncrementalGeneratorInitializationContext context,
+        IncrementalValueProvider<ImmutableArray<SourceSpec>> provider
+    )
+    {
+        context.RegisterSourceOutput(
+            provider,
+            (context, specs) =>
+            {
+                foreach (var spec in specs)
+                {
+                    context.AddSource(spec.Path, spec.ToString());
+                }
+            }
+        );
+    }
+
+    public static IncrementalValuesProvider<U> MaybeSelect<T, U>(
+        this IncrementalValuesProvider<T> source,
+        Func<T, Optional<U>> selector
+    ) => source.SelectMany(ImmutableArray<U> (x, _) =>
+    {
+        var result = selector(x);
+
+        if (!result.HasValue) return ImmutableArray<U>.Empty;
+        return ImmutableArray.Create(result.Value);
+    });
+
+    public static IncrementalValuesProvider<U> MaybeSelectMany<T, U>(
+        this IncrementalValuesProvider<T> source,
+        Func<T, IEnumerable<Optional<U>>> selector
+    ) => source.SelectMany(ImmutableArray<U> (x, _) =>
+        ImmutableArray.CreateRange(
+            selector(x)
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+        )
+    );
+
+    public static IncrementalValuesProvider<T> DependsOn<T, U, V>(
+        this IncrementalValuesProvider<T> source,
+        IncrementalKeyValueProvider<U, V> other
+    ) => source.Combine(other.EntriesProvider.Collect()).Select((pair, _) => pair.Left);
+    
+    public static IncrementalValuesProvider<T> DependsOn<T, U, V>(
+        this IncrementalValuesProvider<T> source,
+        IncrementalGroupingProvider<U, V> other
+    ) => source.Combine(other.EntriesProvider.Collect()).Select((pair, _) => pair.Left);
 }

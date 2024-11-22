@@ -1,12 +1,11 @@
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
-using Discord.Net.Hanz.Tasks.Actors.V3;
+using Discord.Net.Hanz.Tasks.Actors.Nodes;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes;
+namespace Discord.Net.Hanz.Tasks.Actors.Links.Nodes.Modifiers;
 
 public class BackLinkNode :
-    Node,
+    LinkNode,
     INestedTypeProducerNode
 {
     public readonly record struct State<TParent>(
@@ -34,7 +33,7 @@ public class BackLinkNode :
         }
     }
 
-    public BackLinkNode(NodeProviders providers, Logger logger) : base(providers, logger)
+    public BackLinkNode(IncrementalGeneratorInitializationContext context, Logger logger) : base(context, logger)
     {
     }
 
@@ -71,7 +70,7 @@ public class BackLinkNode :
         if (!state.IsRoot)
         {
             spec = spec.AddBases(state.Path.FormatParent());
-
+            
             for (var i = 2; i < state.Path.Count - 1; i++)
             {
                 spec = spec.AddBases(

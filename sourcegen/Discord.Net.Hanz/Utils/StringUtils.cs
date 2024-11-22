@@ -22,4 +22,30 @@ public static class StringUtils
         return str.Prefix((width / 2) - (str.Length / 2)).PadRight(width);
 
     }
+    
+    public static string ToParameterName(this string name)
+    {
+        if (name == string.Empty) return name;
+
+        if (name.StartsWith("_"))
+            name = name.Substring(1);
+
+        int lowerCount = 0;
+        for (; lowerCount != name.Length; lowerCount++)
+        {
+            if (char.IsLower(name[lowerCount]))
+                break;
+        }
+
+        if (lowerCount == name.Length)
+            return name.ToLower();
+
+        if (lowerCount > 1)
+            lowerCount--;
+
+        var a = name.Substring(0, lowerCount);
+        var b = name.Substring(lowerCount);
+
+        return $"{a.ToLower()}{b}";
+    }
 }

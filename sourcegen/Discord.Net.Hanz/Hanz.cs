@@ -6,8 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection;
-using Discord.Net.Hanz.Tasks.Actors.Links.V5;
-using Discord.Net.Hanz.Tasks.Actors.V3;
+using Discord.Net.Hanz.Nodes;
 
 namespace Discord.Net.Hanz;
 
@@ -199,11 +198,10 @@ public sealed class Hanz : IIncrementalGenerator
             RootLogger.DeleteLogFile();
 
             var options = context.AnalyzerConfigOptionsProvider.Select((options, _) => GetLoggingOptions(options));
-
+            
             SetupLogger(context, options);
 
             GenerationTask.Initialize(context);
-            //new LinksV5(context, RootLogger);
             
             var generationTasks = typeof(Hanz).Assembly.GetTypes()
                 .Where(x => x

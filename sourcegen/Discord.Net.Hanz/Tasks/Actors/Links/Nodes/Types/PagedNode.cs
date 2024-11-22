@@ -1,10 +1,9 @@
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
+namespace Discord.Net.Hanz.Tasks.Actors.Links.Nodes.Types;
 
-public class PagedNode : BaseLinkNode
+public class PagedNode : BaseLinkTypeNode
 {
     private readonly record struct State(
         bool PagesEntity,
@@ -44,11 +43,11 @@ public class PagedNode : BaseLinkNode
         }
     }
     
-    public PagedNode(NodeProviders providers, Logger logger) : base(providers, logger)
+    public PagedNode(IncrementalGeneratorInitializationContext context, Logger logger) : base(context, logger)
     {
     }
 
-    protected override bool ShouldContinue(LinkNode.State linkState, CancellationToken token)
+    protected override bool ShouldContinue(LinkTypeNode.State linkState, CancellationToken token)
         => linkState is {IsTemplate: true, Entry.Type.Name: "Paged"};
 
     protected override IncrementalValuesProvider<Branch<ILinkImplmenter.LinkImplementation>> CreateImplementation(

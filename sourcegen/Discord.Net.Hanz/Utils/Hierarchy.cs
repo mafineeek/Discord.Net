@@ -7,9 +7,6 @@ namespace Discord.Net.Hanz;
 
 public static class Hierarchy
 {
-    private static readonly Dictionary<ITypeSymbol, List<SortedHierarchySymbol>> _cache =
-        new(SymbolEqualityComparer.Default);
-
     public static bool Implements(INamedTypeSymbol source, INamedTypeSymbol toCheck)
     {
         if (source.TypeKind is TypeKind.Interface && toCheck.TypeKind is TypeKind.Class)
@@ -359,11 +356,7 @@ public static class Hierarchy
     }
 
     public static List<SortedHierarchySymbol> GetHierarchy(ITypeSymbol symbol, bool cache = true)
-    {
-        return cache && _cache.TryGetValue(symbol, out var cached)
-            ? cached
-            : _cache[symbol] = CreateHierarchyMap(symbol);
-    }
+        => CreateHierarchyMap(symbol);
 
     internal static List<SortedHierarchySymbol> CreateHierarchyMap(ITypeSymbol symbol)
     {

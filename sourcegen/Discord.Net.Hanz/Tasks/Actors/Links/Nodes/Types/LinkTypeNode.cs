@@ -1,15 +1,13 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Text;
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
-using Discord.Net.Hanz.Tasks.Actors.V3;
+using Discord.Net.Hanz.Tasks.Actors.Links.Nodes.Modifiers;
+using Discord.Net.Hanz.Tasks.Actors.Nodes;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Types;
+namespace Discord.Net.Hanz.Tasks.Actors.Links.Nodes.Types;
 
-public class LinkNode :
-    Node,
+public class LinkTypeNode :
+    LinkNode,
     INestedTypeProducerNode
 {
     public readonly record struct State(
@@ -18,17 +16,13 @@ public class LinkNode :
         LinkSchematics.Entry Entry
     ) : IPathedState
     {
-        public bool IsTemplate { get; } = !Path.Contains<LinkNode>();
+        public bool IsTemplate { get; } = !Path.Contains<LinkTypeNode>();
 
-        public TypePath Path { get; } = Path.Add<LinkNode>(Entry.Type.ReferenceName);
+        public TypePath Path { get; } = Path.Add<LinkTypeNode>(Entry.Type.ReferenceName);
     }
-
-
-    private readonly IncrementalValueProvider<ImmutableArray<LinkSchematics.Schematic>> _schematics;
-
-    public LinkNode(NodeProviders providers, Logger logger) : base(providers, logger)
+    
+    public LinkTypeNode(IncrementalGeneratorInitializationContext context, Logger logger) : base(context, logger)
     {
-        _schematics = providers.Schematics.Collect();
     }
 
     public IncrementalValuesProvider<Branch<TypeSpec>> Create<TSource>(
@@ -36,7 +30,7 @@ public class LinkNode :
     {
         var stateProvider = provider
             .Select((x, _) => x.Parameters)
-            .Combine(_schematics)
+            .Combine(Schematics.Collect())
             .SelectMany((tuple, token) =>
                 CreateState(
                     tuple.Left.Value,
@@ -50,18 +44,18 @@ public class LinkNode :
         var implementationProvider = Branch(
             stateProvider,
             CreateLinkType,
-            GetInstance<IndexableNode>(),
-            GetInstance<EnumerableNode>(),
-            GetInstance<DefinedNode>(),
-            GetInstance<PagedNode>()
+            GetNode<IndexableNode>(),
+            GetNode<EnumerableNode>(),
+            GetNode<DefinedNode>(),
+            GetNode<PagedNode>()
         );
 
         var nestedProvider = AddNestedTypes(
             implementationProvider,
             (state, _) => new NestedTypeProducerContext(state.ActorInfo, state.Path),
-            GetInstance<BackLinkNode>(),
-            GetInstance<HierarchyNode>(),
-            GetInstance<ExtensionNode>()
+            GetNode<BackLinkNode>(),
+            GetNode<HierarchyNode>(),
+            GetNode<ExtensionNode>()
         );
 
         return NestTypesViaPaths(nestedProvider).Select((x, _) => x.Spec);
@@ -139,7 +133,7 @@ public class LinkNode :
             yield return state;
 
             foreach (var child in entry.Children)
-            foreach (var childState in CreateStateForEntry(child, path.Add<LinkNode>(entry.Type.ReferenceName)))
+            foreach (var childState in CreateStateForEntry(child, path.Add<LinkTypeNode>(entry.Type.ReferenceName)))
                 yield return childState;
         }
     }

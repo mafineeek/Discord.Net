@@ -1,3 +1,5 @@
+using Discord.Net.Hanz.Utils;
+using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -6,7 +8,7 @@ namespace Discord.Net.Hanz.Tasks.Actors;
 
 public class ActorsTask : GenerationTask
 {
-     public enum AssemblyTarget
+    public enum AssemblyTarget
     {
         Core,
         Rest
@@ -42,7 +44,7 @@ public class ActorsTask : GenerationTask
         public override int GetHashCode()
             => HashCode
                 .Of(Actor.ToDisplayString())
-                .And((int)Assembly)
+                .And((int) Assembly)
                 .AndEach(Actor
                     .GetAttributes()
                     .Select(x => HashCode
@@ -74,9 +76,25 @@ public class ActorsTask : GenerationTask
                 ).Type;
         }
     }
-    
+
+    public readonly record struct ActorHierarchy(
+        ImmutableEquatableArray<ActorInfo> Parents,
+        ImmutableEquatableArray<ActorInfo> Children
+    )
+    {
+        public static readonly ActorHierarchy Empty = new(
+            ImmutableEquatableArray<ActorInfo>.Empty,
+            ImmutableEquatableArray<ActorInfo>.Empty
+        );
+    }
+
     public IncrementalValuesProvider<ActorSymbols> Actors { get; }
-    
+    public IncrementalKeyValueProvider<string, ActorInfo> ActorInfos { get; }
+
+    public IncrementalKeyValueProvider<ActorInfo, ImmutableEquatableArray<ActorInfo>> ActorAncestors { get; }
+
+    public IncrementalKeyValueProvider<ActorInfo, ActorHierarchy> ActorHierarchies { get; }
+
     public ActorsTask(IncrementalGeneratorInitializationContext context, Logger logger) : base(context, logger)
     {
         Actors = context
@@ -86,6 +104,38 @@ public class ActorsTask : GenerationTask
                 GetPossibleActorSymbols
             )
             .WhereNonNull();
+
+        ActorInfos = Actors
+            .Select((x, _) => ActorInfo.Create(x))
+            .KeyedBy(x => x.Actor.DisplayString);
+
+        ActorAncestors = Actors
+            .KeyedBy(
+                x => x.Actor.ToDisplayString(),
+                x => TypeUtils
+                    .GetBaseTypes(x.Actor)
+                    .Concat(x.Actor.AllInterfaces)
+                    .Select(x => x.ToDisplayString())
+                    .ToImmutableEquatableArray()
+            )
+            .TransformKeyVia(ActorInfos)
+            .Map((info, ancestors) => ancestors
+                .Where(ActorInfos.ContainsKey)
+                .Select(ActorInfos.GetValue)
+                .ToImmutableEquatableArray()
+            );
+
+        ActorHierarchies = ActorAncestors
+            .Map((info, ancestors) =>
+                new ActorHierarchy(
+                    ancestors.ToImmutableEquatableArray(),
+                    ActorAncestors
+                        .Entries
+                        .Where(x => x.Value.Contains(info))
+                        .Select(x => x.Key)
+                        .ToImmutableEquatableArray()
+                )
+            );
     }
 
     public static AssemblyTarget? GetAssemblyTarget(
@@ -101,7 +151,7 @@ public class ActorsTask : GenerationTask
             _ => null
         };
     }
-    
+
     public bool IsPossibleActorNode(SyntaxNode node, CancellationToken token)
     {
         if (node is not TypeDeclarationSyntax typeSyntax)
@@ -130,7 +180,7 @@ public class ActorsTask : GenerationTask
 
         if (ModelExtensions.GetDeclaredSymbol(context.SemanticModel, syntax) is not INamedTypeSymbol symbol)
             return null;
-        
+
         var actorType = assembly switch
         {
             AssemblyTarget.Core => "IActor",

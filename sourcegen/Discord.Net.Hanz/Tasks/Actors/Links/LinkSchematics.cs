@@ -5,7 +5,7 @@ using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace Discord.Net.Hanz.Tasks.Actors.V3;
+namespace Discord.Net.Hanz.Tasks.Actors.Links;
 
 public class LinkSchematics : GenerationTask
 {
@@ -98,7 +98,7 @@ public class LinkSchematics : GenerationTask
         (TypeSpec Spec, ImmutableEquatableArray<string> Usings) result)
     {
         context.AddSource(
-            "LinksV5/Schematics",
+            "Links/Schematics",
             $$"""
               {{string.Join(Environment.NewLine, result.Usings)}}
 

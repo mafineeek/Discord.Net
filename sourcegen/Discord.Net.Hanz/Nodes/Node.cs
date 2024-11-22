@@ -1,27 +1,32 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
+using Discord.Net.Hanz.Tasks.Actors;
 using Discord.Net.Hanz.Utils.Bakery;
 using Microsoft.CodeAnalysis;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes;
+namespace Discord.Net.Hanz.Nodes;
 
-public abstract class Node
+public abstract class Node : GenerationTask
 {
-    private static readonly Dictionary<Type, Node> _nodes = [];
+    public static Logger NodeLogger = Net.Hanz.Logger.CreateForTask("Nodes");
 
-    private static Logger _nodeLogger = Net.Hanz.Logger.CreateForTask("LinkNodes");
+    private readonly IncrementalGeneratorInitializationContext _context;
 
-    private readonly NodeProviders _providers;
-
-    protected Logger Logger { get; }
-
-    protected Node(NodeProviders providers, Logger logger)
+    protected Node(IncrementalGeneratorInitializationContext context, Logger logger) : base(context, logger)
     {
-        Logger = logger;
-        _providers = providers;
+        _context = context;
     }
 
+    protected TNode GetNode<TNode>()
+        where TNode : Node
+    {
+        return GetTask<TNode>(_context);
+    }
+
+    protected TTask GetTask<TTask>()
+        where TTask : GenerationTask
+        => GetTask<TTask>(_context);
+    
     public readonly record struct StatefulGeneration<TState>(
         TState State,
         TypeSpec Spec
@@ -356,50 +361,8 @@ public abstract class Node
                 mapper
             );
     }
-
-    public static void Initialize(
-        NodeProviders providers
-    )
-    {
-        _nodes.Clear();
-
-        foreach
-        (
-            var node in
-            typeof(Node)
-                .Assembly
-                .GetTypes()
-                .Where(x =>
-                    typeof(Node).IsAssignableFrom(x) && x.IsClass && !x.IsAbstract
-                )
-        )
-        {
-            if (_nodes.ContainsKey(node)) continue;
-            GetInstance(node, providers);
-        }
-    }
-
-    protected TNode GetInstance<TNode>()
-        where TNode : Node
-        => GetInstance<TNode>(_providers);
-
-    private static TNode GetInstance<TNode>(NodeProviders providers)
-        where TNode : Node
-        => (TNode) GetInstance(typeof(TNode), providers);
-
-    private static Node GetInstance(Type type, NodeProviders providers)
-    {
-        if (!_nodes.TryGetValue(type, out var node))
-            _nodes[type] = node = (Node) Activator.CreateInstance(
-                type,
-                providers,
-                _nodeLogger.GetSubLogger(type.Name).WithCleanLogFile()
-            );
-
-        return node;
-    }
-
-    protected static string GetFriendlyName(TypeRef type, bool forceInterfaceRules = false)
+    
+    public static string GetFriendlyName(TypeRef type, bool forceInterfaceRules = false)
     {
         var name = type.Name;
 
@@ -435,13 +398,6 @@ public interface IBranchNode<TIn, TOut>
         IncrementalValuesProvider<Branch<TIn>> provider
     );
 }
-
-public readonly record struct NestedTypeProducerContext(
-    ActorInfo ActorInfo,
-    TypePath Path
-);
-
-public interface INestedTypeProducerNode : INestedTypeProducerNode<NestedTypeProducerContext>;
 
 public interface INestedTypeProducerNode<TParameters>
 {

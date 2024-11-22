@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
-using Discord.Net.Hanz.Tasks.Actors.Links.V5;
-using Discord.Net.Hanz.Tasks.Actors.V3;
+using Discord.Net.Hanz.Nodes;
 using Microsoft.CodeAnalysis;
 
 namespace Discord.Net.Hanz;
@@ -12,8 +11,11 @@ public abstract class GenerationTask
 
     private static readonly Logger _logger = Logger.CreateForTask("GenerationTaskBuilder").WithCleanLogFile();
 
+    protected Logger Logger { get; }
+    
     public GenerationTask(IncrementalGeneratorInitializationContext context, Logger logger)
     {
+        Logger = logger;
     }
 
     public static void Initialize(IncrementalGeneratorInitializationContext context)
@@ -34,15 +36,7 @@ public abstract class GenerationTask
             {
                 var type = queue.Dequeue();
 
-                _logger.Log($"Initializing {type}...");
-
-                if (_tasks.ContainsKey(type)) continue;
-
-                var taskLogger = Logger.CreateForTask(type.Name).WithCleanLogFile();
-
-                _tasks[type] = (GenerationTask) Activator.CreateInstance(type, context, taskLogger);
-
-                taskLogger.Flush();
+                GetOrCreate(type, context);
             }
         }
         catch (Exception x)
@@ -59,22 +53,28 @@ public abstract class GenerationTask
         => GetOrCreate<T>(context);
 
     private static T GetOrCreate<T>(IncrementalGeneratorInitializationContext context) where T : GenerationTask
+        => (T)GetOrCreate(typeof(T), context);
+
+    private static GenerationTask GetOrCreate(Type type, IncrementalGeneratorInitializationContext context)
     {
-        if (_tasks.TryGetValue(typeof(T), out var rawTask))
+        lock (_tasks)
         {
-            if (rawTask is not T task)
-                throw new InvalidCastException();
-
-            return task;
+            if (_tasks.TryGetValue(type, out var rawTask))
+                return rawTask;
+        
+            var logger = 
+                typeof(Node).IsAssignableFrom(type)
+                    ? Node.NodeLogger.GetSubLogger(type.Name)
+                    : Logger.CreateForTask(type.Name).WithCleanLogFile();
+        
+            _logger.Log($"Creating instance of {type}..");
+        
+            var instance = (GenerationTask) Activator.CreateInstance(type, context, logger);
+            _tasks[type] = instance;
+        
+            logger.Flush();
+        
+            return instance;
         }
-
-        var logger = Logger.CreateForTask(typeof(T).Name).WithCleanLogFile();
-        
-        var instance = (T) Activator.CreateInstance(typeof(T), context, logger);
-        _tasks[typeof(T)] = instance;
-        
-        logger.Flush();
-        
-        return instance;
     }
 }

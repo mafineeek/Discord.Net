@@ -1,16 +1,16 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
-using Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes;
-using Discord.Net.Hanz.Tasks.Actors.V3;
 using Microsoft.CodeAnalysis;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5;
+namespace Discord.Net.Hanz.Tasks.Actors.Links;
 
-public class LinksV5 : GenerationTask
+public class LinksTask : GenerationTask
 {
+    public IncrementalValuesProvider<NodeContext> NodeContexts { get; }
+    
     private readonly Logger _logger;
 
-    public LinksV5(
+    public LinksTask(
         IncrementalGeneratorInitializationContext context,
         Logger logger
     ) : base(context, logger)
@@ -20,18 +20,9 @@ public class LinksV5 : GenerationTask
         var actorTask = GetTask<ActorsTask>(context);
         var schematicTask = GetTask<LinkSchematics>(context);
 
-        var provider = schematicTask.Schematics
+        NodeContexts = schematicTask.Schematics
             .Combine(actorTask.Actors.Collect())
             .SelectMany((x, _) => x.Right.Select(y => new NodeContext(x.Left, y)));
-
-        Node.Initialize(
-            new NodeProviders(
-                schematicTask.Schematics,
-                actorTask.Actors,
-                provider,
-                context
-            )
-        );
     }
 
     public readonly struct NodeContext : IEquatable<NodeContext>

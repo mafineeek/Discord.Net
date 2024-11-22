@@ -137,7 +137,7 @@ public readonly record struct TypeSpec(
     ) => this with
     {
         Methods = Methods.Add(new MethodSpec(
-            Name,
+            methodName,
             returnType,
             ExplicitInterfaceImplementation: interfaceName,
             Parameters: new(parameters),
@@ -148,7 +148,10 @@ public readonly record struct TypeSpec(
 
     public bool HasBrackets
         => Children.Count > 0 ||
-           Properties.Count > 0;
+           Properties.Count > 0 ||
+           Methods.Count > 0 ||
+           Fields.Count > 0 ||
+           Indexers.Count > 0;
 
     public static TypeSpec From(TypeRef typeref)
     {
@@ -172,7 +175,7 @@ public readonly record struct TypeSpec(
         if (Modifiers.Count > 0)
         {
             builder
-                .Append(string.Join(" ", Modifiers))
+                .Append(string.Join(" ", Modifiers.Distinct()))
                 .Append(' ');
         }
 
@@ -185,7 +188,7 @@ public readonly record struct TypeSpec(
         {
             builder
                 .Append('<')
-                .Append(string.Join(", ", Generics))
+                .Append(string.Join(", ", Generics.Distinct()))
                 .Append('>');
         }
 
@@ -193,14 +196,14 @@ public readonly record struct TypeSpec(
         {
             builder
                 .AppendLine(" : ")
-                .Append(string.Join($",{Environment.NewLine}", Bases).Prefix(4).WithNewlinePadding(4));
+                .Append(string.Join($",{Environment.NewLine}", Bases.Distinct()).Prefix(4).WithNewlinePadding(4));
         }
 
         if (GenericConstraints.Count > 0)
         {
             builder
                 .AppendLine()
-                .Append(string.Join(Environment.NewLine, GenericConstraints).Prefix(4).WithNewlinePadding(4));
+                .Append(string.Join(Environment.NewLine, GenericConstraints.Distinct()).Prefix(4).WithNewlinePadding(4));
         }
 
         if (HasBrackets)

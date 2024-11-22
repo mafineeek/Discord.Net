@@ -10,6 +10,10 @@
     <PackageIcon>sourcegen_supremacy.png</PackageIcon>
   </PropertyGroup>
 
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Bcl.HashCode" Version="1.1.1" />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
@@ -23,5 +27,11 @@
       <Pack>True</Pack>
       <Link>sourcegen_supremacy.png</Link>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Tasks\Actors\Links\Nodes\Implementations\" />
+    <Folder Include="Tasks\Actors\TraitsV2\Nodes\Loadable\" />
+    <Folder Include="Tasks\Actors\TraitsV2\Nodes\Modifable\" />
   </ItemGroup>
 </Project>

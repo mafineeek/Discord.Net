@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Text;
+using Discord.Net.Hanz.Tasks.Actors.Nodes;
 using Discord.Net.Hanz.Utils.Bakery;
 
-namespace Discord.Net.Hanz.Tasks.Actors.Links.V5.Nodes.Common;
+namespace Discord.Net.Hanz;
 
 public interface IPathedState
 {
@@ -39,6 +40,24 @@ public readonly record struct TypePath(
 
     #region Products
 
+    /// <summary>
+    ///     Computes the ordered cartesian product of all the parts in the path.
+    ///     <br/><br/>
+    ///     The cartesian product is defined to be all unique combinations of each part in the path that retains the
+    ///     order they appeared in the current path. <br/>
+    ///     Ex, {a, b, c} would have the following products:
+    ///     <code>
+    ///     {a}
+    ///     {b}
+    ///     {c}
+    ///     {a, b}
+    ///     {a, c}
+    ///     {b, c}
+    ///     {a, b, c}
+    ///     </code>
+    /// </summary>
+    /// <param name="removeLast">Whether to remove the last entry, usually the current path.</param>
+    /// <returns>Each cartesian composition of the current path.</returns>
     public IEnumerable<TypePath> CartesianProduct(bool removeLast = true)
     {
         if (IsEmpty) return [];
@@ -52,6 +71,19 @@ public readonly record struct TypePath(
             );
     }
 
+    /// <summary>
+    ///     Computes the semantical product of the current path.
+    ///     <br/><br/>
+    ///     The semantical product is defined as all unique combinations of each part that excludes subsets of the
+    ///     cartesian part. <br/>
+    ///     Ex, {a, b, c} would have the following products:
+    ///     <code>
+    ///     {c},
+    ///     {b, c}
+    ///     {a, b},
+    ///     </code>
+    /// </summary>
+    /// <returns>Each semantical product of the current path.</returns>
     public IEnumerable<TypePath> SemanticalProduct()
     {
         var products = CartesianProduct().ToArray();

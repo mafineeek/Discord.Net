@@ -97,8 +97,7 @@ public readonly record struct MethodSpec(
         {
             builder.AppendLine()
                 .AppendLine("{")
-                .AppendLine()
-                .AppendLine(Body)
+                .AppendLine(Body.Prefix(4).WithNewlinePadding(4).TrimEnd(['\r', '\n', ' ', '\t']))
                 .AppendLine("}");
         }
         else
